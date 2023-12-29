@@ -1,6 +1,10 @@
 ## nt2
 
-Python package for visualization and post-processing of the [`Entity`](https://github.com/entity-toolkit/entity) simulation data. For usage, please refer to the [documentation](https://entity-toolkit.github.io/entity/howto/vis/#nt2py).
+Python package for visualization and post-processing of the [`Entity`](https://github.com/entity-toolkit/entity) simulation data. For usage, please refer to the [documentation](https://entity-toolkit.github.io/entity/howto/vis/#nt2py). The package is distributed via [`PyPI`](https://pypi.org/project/nt2py/):
+
+```sh
+pip install nt2py
+```
 
 ### Features
 
