@@ -43,3 +43,6 @@ Repository = "https://github.com/entity-toolkit/nt2py"
 
 [tool.hatch.version]
 path = "nt2/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nt2"]
