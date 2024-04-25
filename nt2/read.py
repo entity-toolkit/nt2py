@@ -589,8 +589,8 @@ class Data:
             "Ttz": "Pz",
         }
         CoordinateDict = {
-            "cartesian": {"x": "x", "y": "y", "z": "z", "1": "x", "2": "y", "3": "z"},
-            "spherical": {
+            "cart": {"x": "x", "y": "y", "z": "z", "1": "x", "2": "y", "3": "z"},
+            "sph": {
                 "r": "r",
                 "theta": "θ" if useGreek else "th",
                 "phi": "φ" if useGreek else "ph",
@@ -600,7 +600,7 @@ class Data:
             },
         }
         PrtlDict = {
-            "cartesian": {
+            "cart": {
                 "X1": "x",
                 "X2": "y",
                 "X3": "z",
@@ -608,7 +608,7 @@ class Data:
                 "U2": "uy",
                 "U3": "uz",
             },
-            "spherical": {
+            "sph": {
                 "X1": "r",
                 "X2": "θ" if useGreek else "th",
                 "X3": "φ" if useGreek else "ph",
@@ -623,40 +623,39 @@ class Data:
         except OSError:
             raise OSError(f"Could not open file {self.fname}")
         step0 = list(self.file.keys())[0]
-        nsteps = int(self.file.attrs["NumSteps"])
+        nsteps = len(self.file.keys())
         ngh = int(self.file.attrs["NGhosts"])
         layout = "right" if self.file.attrs["LayoutRight"] == 1 else "left"
         dimension = int(self.file.attrs["Dimension"])
         coordinates = self.file.attrs["Coordinates"].decode("UTF-8")
-        if coordinates == "qspherical":
-            coordinates = "spherical"
-        if coordinates == "spherical":
+        if coordinates == "qsph":
+            coordinates = "sph"
+        if coordinates == "sph":
             self.metric = SphericalMetric()
         else:
             self.metric = MinkowskiMetric()
         coords = list(CoordinateDict[coordinates].values())[::-1][-dimension:]
         # cell-centered coords
-        cc_coords = {
-            c: EdgeToCenter(self.file.attrs[f"X{i+1}"])
-            for i, c in enumerate(coords[::-1])
-        }
-        # upper and lower limits of the cell
+        cc_coords = {c: self.file[step0][f"X{i+1}"] for i, c in enumerate(coords[::-1])}
+        # cell edges
         cell_1 = {
             f"{c}_1": (
                 c,
-                self.file.attrs[f"X{i+1}"][:-1],
+                self.file[step0][f"X{i+1}e"][:-1],
             )
             for i, c in enumerate(coords[::-1])
         }
         cell_2 = {
             f"{c}_2": (
                 c,
-                self.file.attrs[f"X{i+1}"][1:],
+                self.file[step0][f"X{i+1}e"][1:],
             )
             for i, c in enumerate(coords[::-1])
         }
 
-        times = np.array([self.file[f"Step{s}"]["Time"][()] for s in range(nsteps)])
+        times = np.array(
+            [self.file[f"Step{s}"]["Time"][()] for s in range(nsteps)], dtype=float
+        )
 
         if dimension == 1:
             noghosts = slice(ngh, -ngh) if ngh > 0 else slice(None)
@@ -700,9 +699,11 @@ class Data:
                 dask_arrays.append(array[noghosts])
 
             k_ = reduce(
-                lambda x, y: x.replace(*y)
-                if "_" not in x
-                else "_".join([x.split("_")[0].replace(*y)] + x.split("_")[1:]),
+                lambda x, y: (
+                    x.replace(*y)
+                    if "_" not in x
+                    else "_".join([x.split("_")[0].replace(*y)] + x.split("_")[1:])
+                ),
                 [k, *list(CoordinateDict[coordinates].items())],
             )
             k_ = reduce(
@@ -722,68 +723,68 @@ class Data:
             )
             self.dataset[k_] = x
 
-        prtls = [
-            k
-            for k in self.file[step0].keys()
-            if (k.startswith("X") or k.startswith("U") or k.startswith("W"))
-        ]
+        # prtls = [
+        #     k
+        #     for k in self.file[step0].keys()
+        #     if (k.startswith("X") or k.startswith("U") or k.startswith("W"))
+        # ]
 
-        species = np.unique(
-            [int(pq.split("_")[1]) for pq in self.file[step0].keys() if pq in prtls]
-        )
+        # species = np.unique(
+        #     [int(pq.split("_")[1]) for pq in self.file[step0].keys() if pq in prtls]
+        # )
 
-        def list_to_ragged(arr):
-            max_len = np.max([len(a) for a in arr])
-            return map(
-                lambda a: np.concatenate([a, np.full(max_len - len(a), np.nan)]), arr
-            )
+        # def list_to_ragged(arr):
+        #     max_len = np.max([len(a) for a in arr])
+        #     return map(
+        #         lambda a: np.concatenate([a, np.full(max_len - len(a), np.nan)]), arr
+        #     )
 
         self._particles = {}
-        for s in species:
-            prtl_data = {}
-            for q in [
-                f"X1_{s}",
-                f"X2_{s}",
-                f"X3_{s}",
-                f"U1_{s}",
-                f"U2_{s}",
-                f"U3_{s}",
-                f"W_{s}",
-            ]:
-                if q[0] in ["X", "U"]:
-                    q_ = PrtlDict[coordinates][q.split("_")[0]]
-                else:
-                    q_ = q.split("_")[0]
-                if q not in prtls:
-                    continue
-                if q not in prtl_data.keys():
-                    prtl_data[q_] = []
-                for k in range(nsteps):
-                    step_k = f"Step{k}"
-                    if q in self.file[step_k].keys():
-                        prtl_data[q_].append(self.file[step_k][q])
-                    else:
-                        prtl_data[q_].append(np.full_like(prtl_data[q_][-1], np.nan))
-                prtl_data[q_] = list_to_ragged(prtl_data[q_])
-                prtl_data[q_] = da.from_array(list(prtl_data[q_]))
-                prtl_data[q_] = xr.DataArray(
-                    prtl_data[q_], dims=["t", "id"], name=q_, coords={"t": times}
-                )
-            if coordinates == "spherical":
-                prtl_data["x"] = (
-                    prtl_data[PrtlDict[coordinates]["X1"]]
-                    * np.sin(prtl_data[PrtlDict[coordinates]["X2"]])
-                    * np.cos(prtl_data[PrtlDict[coordinates]["X3"]])
-                )
-                prtl_data["y"] = (
-                    prtl_data[PrtlDict[coordinates]["X1"]]
-                    * np.sin(prtl_data[PrtlDict[coordinates]["X2"]])
-                    * np.sin(prtl_data[PrtlDict[coordinates]["X3"]])
-                )
-                prtl_data["z"] = prtl_data[PrtlDict[coordinates]["X1"]] * np.cos(
-                    prtl_data[PrtlDict[coordinates]["X2"]]
-                )
-            self._particles[s] = xr.Dataset(prtl_data)
+        # for s in species:
+        #     prtl_data = {}
+        #     for q in [
+        #         f"X1_{s}",
+        #         f"X2_{s}",
+        #         f"X3_{s}",
+        #         f"U1_{s}",
+        #         f"U2_{s}",
+        #         f"U3_{s}",
+        #         f"W_{s}",
+        #     ]:
+        #         if q[0] in ["X", "U"]:
+        #             q_ = PrtlDict[coordinates][q.split("_")[0]]
+        #         else:
+        #             q_ = q.split("_")[0]
+        #         if q not in prtls:
+        #             continue
+        #         if q not in prtl_data.keys():
+        #             prtl_data[q_] = []
+        #         for k in range(nsteps):
+        #             step_k = f"Step{k}"
+        #             if q in self.file[step_k].keys():
+        #                 prtl_data[q_].append(self.file[step_k][q])
+        #             else:
+        #                 prtl_data[q_].append(np.full_like(prtl_data[q_][-1], np.nan))
+        #         prtl_data[q_] = list_to_ragged(prtl_data[q_])
+        #         prtl_data[q_] = da.from_array(list(prtl_data[q_]))
+        #         prtl_data[q_] = xr.DataArray(
+        #             prtl_data[q_], dims=["t", "id"], name=q_, coords={"t": times}
+        #         )
+        #     if coordinates == "spherical":
+        #         prtl_data["x"] = (
+        #             prtl_data[PrtlDict[coordinates]["X1"]]
+        #             * np.sin(prtl_data[PrtlDict[coordinates]["X2"]])
+        #             * np.cos(prtl_data[PrtlDict[coordinates]["X3"]])
+        #         )
+        #         prtl_data["y"] = (
+        #             prtl_data[PrtlDict[coordinates]["X1"]]
+        #             * np.sin(prtl_data[PrtlDict[coordinates]["X2"]])
+        #             * np.sin(prtl_data[PrtlDict[coordinates]["X3"]])
+        #         )
+        #         prtl_data["z"] = prtl_data[PrtlDict[coordinates]["X1"]] * np.cos(
+        #             prtl_data[PrtlDict[coordinates]["X2"]]
+        #         )
+        #     self._particles[s] = xr.Dataset(prtl_data)
 
     def __del__(self):
         self.file.close()
@@ -878,7 +879,7 @@ class Data:
                 exp.makeFrames(
                     plot,
                     np.arange(len(self.t)),
-                    f"{self.attrs['Title']}/frames",
+                    f"{self.attrs['simulation.name']}/frames",
                     data=self,
                     num_cpus=kwargs.pop("num_cpus", None),
                 )
@@ -887,9 +888,9 @@ class Data:
             makemovie = True
         if makemovie:
             exp.makeMovie(
-                input=f"{self.attrs['Title']}/frames/",
+                input=f"{self.attrs['simulation.name']}/frames/",
                 overwrite=True,
-                output=f"{self.attrs['Title']}.mp4",
+                output=f"{self.attrs['simulation.name']}.mp4",
                 number=5,
                 **kwargs,
             )

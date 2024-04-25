@@ -1,3 +1,45 @@
 [build-system]
-requires      = ["setuptools", "wheel", "setuptools_scm", "pypandoc"]
-build-backend = 'setuptools.build_meta'
+requires      = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nt2py"
+dynamic = ["version"]
+dependencies = [
+"types-setuptools",
+"dask",
+"xarray",
+"numpy",
+"scipy",
+"h5py",
+"h5pickle",
+"matplotlib",
+"tqdm",
+"contourpy",
+]
+requires-python = ">=3.8"
+authors = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
+maintainers = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
+description = "Post-processing & visualization toolkit for the Entity PIC code"
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+"Development Status :: 5 - Production/Stable",
+"Intended Audience :: Science/Research",
+"Intended Audience :: Education",
+"Topic :: Scientific/Engineering :: Physics",
+"Topic :: Scientific/Engineering :: Astronomy",
+"License :: OSI Approved :: BSD License",
+"Programming Language :: Python :: 3 :: Only",
+"Programming Language :: Python :: 3.8",
+"Programming Language :: Python :: 3.9",
+"Programming Language :: Python :: 3.10",
+"Programming Language :: Python :: 3.11",
+"Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Repository = "https://github.com/entity-toolkit/nt2py"
+
+[tool.hatch.version]
+path = "nt2/__init__.py"
