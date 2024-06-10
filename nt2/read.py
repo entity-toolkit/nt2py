@@ -630,11 +630,13 @@ class Data:
         else:
             self.metric = MinkowskiMetric()
         coords = list(CoordinateDict[coordinates].values())[::-1][-dimension:]
-        
+
         for s in self.file.keys():
             if any([k.startswith("X") for k in self.file[s].keys()]):
                 # cell-centered coords
-                cc_coords = {c: self.file[s][f"X{i+1}"] for i, c in enumerate(coords[::-1])}
+                cc_coords = {
+                    c: self.file[s][f"X{i+1}"] for i, c in enumerate(coords[::-1])
+                }
                 # cell edges
                 cell_1 = {
                     f"{c}_1": (
@@ -664,7 +666,7 @@ class Data:
             )
 
         self.dataset = xr.Dataset()
-        
+
         # -------------------------------- load fields ------------------------------- #
         fields = None
         f_outsteps = []
@@ -677,6 +679,10 @@ class Data:
                 f_outsteps.append(s)
                 f_times.append(self.file[s]["Time"][()])
                 f_steps.append(self.file[s]["Step"][()])
+
+        f_outsteps = sorted(f_outsteps, key=lambda x: int(x.replace("Step", "")))
+        f_steps = sorted(f_steps)
+        f_times = np.array(sorted(f_times), dtype=np.float64)
 
         for k in self.file.attrs.keys():
             if (
@@ -722,7 +728,7 @@ class Data:
                 },
             )
             self.dataset[k_] = x
-            
+
         # ------------------------------ load particles ------------------------------ #
         particles = None
         p_outsteps = []
@@ -735,19 +741,27 @@ class Data:
                 p_outsteps.append(s)
                 p_times.append(self.file[s]["Time"][()])
                 p_steps.append(self.file[s]["Step"][()])
-        
+
+        p_outsteps = sorted(p_outsteps, key=lambda x: int(x.replace("Step", "")))
+        p_steps = sorted(p_steps)
+        p_times = np.array(sorted(p_times), dtype=np.float64)
+
         self._particles = {}
-        
 
         if len(p_outsteps) > 0:
             species = np.unique(
-                [int(pq.split("_")[1]) for pq in self.file[p_outsteps[0]].keys() if pq.startswith("p")]
+                [
+                    int(pq.split("_")[1])
+                    for pq in self.file[p_outsteps[0]].keys()
+                    if pq.startswith("p")
+                ]
             )
 
             def list_to_ragged(arr):
                 max_len = np.max([len(a) for a in arr])
                 return map(
-                    lambda a: np.concatenate([a, np.full(max_len - len(a), np.nan)]), arr
+                    lambda a: np.concatenate([a, np.full(max_len - len(a), np.nan)]),
+                    arr,
                 )
 
             for s in species:
@@ -773,11 +787,16 @@ class Data:
                         if "p" + q in self.file[step_k].keys():
                             prtl_data[q_].append(self.file[step_k]["p" + q])
                         else:
-                            prtl_data[q_].append(np.full_like(prtl_data[q_][-1], np.nan))
+                            prtl_data[q_].append(
+                                np.full_like(prtl_data[q_][-1], np.nan)
+                            )
                     prtl_data[q_] = list_to_ragged(prtl_data[q_])
                     prtl_data[q_] = da.from_array(list(prtl_data[q_]))
                     prtl_data[q_] = xr.DataArray(
-                        prtl_data[q_], dims=["t", "id"], name=q_, coords={"t": p_times, "s": ("t", p_steps)}
+                        prtl_data[q_],
+                        dims=["t", "id"],
+                        name=q_,
+                        coords={"t": p_times, "s": ("t", p_steps)},
                     )
                 if coordinates == "sph":
                     prtl_data["x"] = (
@@ -794,7 +813,7 @@ class Data:
                         prtl_data[PrtlDict[coordinates]["X2"]]
                     )
                 self._particles[s] = xr.Dataset(prtl_data)
-                
+
         # ------------------------------- load spectra ------------------------------- #
         spectra = None
         s_outsteps = []
@@ -807,13 +826,21 @@ class Data:
                 s_outsteps.append(s)
                 s_times.append(self.file[s]["Time"][()])
                 s_steps.append(self.file[s]["Step"][()])
-        
+
+        s_outsteps = sorted(s_outsteps, key=lambda x: int(x.replace("Step", "")))
+        s_steps = sorted(s_steps)
+        s_times = np.array(sorted(s_times), dtype=np.float64)
+
         self._spectra = xr.Dataset()
         log_bins = self.file.attrs["output.spectra.log_bins"]
 
         if len(s_outsteps) > 0:
             species = np.unique(
-                [int(pq.split("_")[1]) for pq in self.file[s_outsteps[0]].keys() if pq.startswith("sN")]
+                [
+                    int(pq.split("_")[1])
+                    for pq in self.file[s_outsteps[0]].keys()
+                    if pq.startswith("sN")
+                ]
             )
             e_bins = self.file[s_outsteps[0]]["sEbn"]
             if log_bins:
@@ -839,8 +866,6 @@ class Data:
                 )
                 self._spectra[f"n_{sp}"] = x
 
-        
-
     def __del__(self):
         self.file.close()
 
@@ -855,15 +880,11 @@ class Data:
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.file.close()
-        self.close()
-        for _, v in self._particles.items():
-            del v
-        del self
 
     @property
     def particles(self):
         return self._particles
-    
+
     @property
     def spectra(self):
         return self._spectra
