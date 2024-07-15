@@ -939,7 +939,7 @@ class Data:
 
     def makeMovie(self, plot, makeframes=True, **kwargs):
         """
-        Makes a movie from a plot function
+        Makes a movie from a plot function. Additional keyword arguments are passed to `makeMovie`.
 
         Parameters
         ----------
@@ -949,20 +949,34 @@ class Data:
             Whether to make the frames, or just proceed to making the movie. Default is True.
         num_cpus : int, optional
             The number of CPUs to use for making the frames. Default is None.
-        **kwargs :
-            Additional keyword arguments passed to `ffmpeg`.
+        ffmpeg : str, optional
+            Path to the ffmpeg executable. Default is "ffmpeg".
+        framerate : int | str, optional
+            The framerate of the movie. Default is 30.
+        start : int | str, optional
+            The start frame. Default is 0.
+        input : str, optional
+            The input pattern. Default is "step_".
+        number : int, optional
+            Zero-padding for the input pattern. Default is 3.
+        extension : str, optional
+            The extension of the input pattern. Default is "png".
+        compression : int | str, optional
+            The compression level. Default is 1.
+        overwrite : bool, optional
+            Whether to overwrite the output file. Default is False.
+        output : str, optional
+            The output file name. Default is "movie.mp4".
         """
         import numpy as np
 
         if makeframes:
-            makemovie = all(
-                exp.makeFrames(
-                    plot,
-                    np.arange(len(self.t)),
-                    f"{self.attrs['simulation.name']}/frames",
-                    data=self,
-                    num_cpus=kwargs.pop("num_cpus", None),
-                )
+            makemovie = exp.makeFrames(
+                plot,
+                np.arange(len(self.t)),
+                f"{self.attrs['simulation.name']}/frames",
+                data=self,
+                num_cpus=kwargs.pop("num_cpus", None),
             )
         else:
             makemovie = True

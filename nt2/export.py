@@ -15,8 +15,8 @@ def makeMovie(**ffmpeg_kwargs):
     tool with the given arguments.
     Examples
     --------
-    >>> makeMovie(ffmpeg="/path/to/ffmpeg", framerate="30", start="0", input="step_", number=3,
-                  extension="png", compression="1", overwrite=True, output="anim.mp4")
+    >>> makeMovie(ffmpeg="/path/to/ffmpeg", framerate=30, start=0, input="step_", number=3,
+                  extension="png", compression=1, overwrite=True, output="anim.mp4")
     """
     import subprocess
 
@@ -24,20 +24,20 @@ def makeMovie(**ffmpeg_kwargs):
         ffmpeg_kwargs.get("ffmpeg", "ffmpeg"),
         "-nostdin",
         "-framerate",
-        ffmpeg_kwargs.get("framerate", "30"),
+        str(ffmpeg_kwargs.get("framerate", 30)),
         "-start_number",
-        ffmpeg_kwargs.get("start", "0"),
+        str(ffmpeg_kwargs.get("start", 0)),
         "-i",
         ffmpeg_kwargs.get("input", "step_")
         + f"%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}",
         "-c:v",
         "libx264",
         "-crf",
-        ffmpeg_kwargs.get("compression", "1"),
+        str(ffmpeg_kwargs.get("compression", 1)),
         "-filter_complex",
         "[0:v]format=yuv420p,pad=ceil(iw/2)*2:ceil(ih/2)*2",
         "-y" if ffmpeg_kwargs.get("overwrite", False) else None,
-        ffmpeg_kwargs.get("output", "anim.mp4"),
+        ffmpeg_kwargs.get("output", "movie.mp4"),
     ]
     command = [str(c) for c in command if c is not None]
     print("Command:\n", " ".join(command))
@@ -49,6 +49,23 @@ def makeMovie(**ffmpeg_kwargs):
     else:
         print("ffmpeg -- [not OK]", result.returncode, result.stdout, result.stderr)
         return False
+
+
+class PlotWorker:
+    def __init__(self, plot, fpath, data=None):
+        self.plot = plot
+        self.fpath = fpath
+        self.data = data
+
+    def __call__(self, ti):
+        import matplotlib.pyplot as plt
+
+        if self.data is None:
+            self.plot(ti)
+        else:
+            self.plot(ti, self.data)
+        plt.savefig(f"{self.fpath}/{ti:05d}.png")
+        plt.close()
 
 
 def makeFrames(plot, steps, fpath, data=None, num_cpus=None):
@@ -84,35 +101,26 @@ def makeFrames(plot, steps, fpath, data=None, num_cpus=None):
     >>> makeFrames(plot_func, range(100), 'output/', num_cpus=16)
     """
 
-    from tqdm import tqdm
+    import tqdm
     import multiprocessing as mp
-    import matplotlib.pyplot as plt
     import os
 
-    global plotAndSave
-
-    def plotAndSave(ti, t, fpath):
-        try:
-            if data is None:
-                plot(t)
-            else:
-                plot(t, data)
-            plt.savefig(f"{fpath}/{ti:05d}.png")
-            plt.close()
-            return True
-        except Exception as e:
-            print(f"Error: {e}")
-            return False
+    # if fpath doesn't exist, create it
+    if not os.path.exists(fpath):
+        os.makedirs(fpath)
 
     if num_cpus is None:
         num_cpus = mp.cpu_count()
 
     pool = mp.Pool(num_cpus)
 
-    # if fpath doesn't exist, create it
-    if not os.path.exists(fpath):
-        os.makedirs(fpath)
-
-    tasks = [[ti, t, fpath] for ti, t in enumerate(steps)]
-    results = [pool.apply_async(plotAndSave, t) for t in tasks]
-    return [result.get() for result in tqdm(results)]
+    try:
+        for _ in tqdm.tqdm(
+            pool.imap_unordered(PlotWorker(plot, fpath, data), steps),
+            total=len(steps),
+        ):
+            ...
+        return True
+    except Exception as e:
+        print("Error:", e)
+        return False
