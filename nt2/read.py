@@ -12,8 +12,15 @@ class Data(FieldsContainer, ParticleContainer, SpectraContainer):
         super(Data, self).__init__(**kwargs)
 
     def __repr__(self) -> str:
+        help = "Usage: \n"
+        help += "  data = Data(path, ...)\n"
+        help += "  data.fields\n"
+        help += "  data.particles\n"
+        help += "  data.spectra\n"
         return (
-            self.print_container()
+            help
+            + "\n"
+            + self.print_container()
             + "\n"
             + self.print_fields()
             + "\n"

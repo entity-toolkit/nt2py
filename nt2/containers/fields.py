@@ -1,115 +1,13 @@
+import os
 import h5py
 import xarray as xr
-import numpy as np
-from dask.array.core import from_array
-from dask.array.core import stack
 
 from nt2.containers.container import Container
-from nt2.containers.utils import _read_category_metadata_SingleFile
-
-
-def _read_coordinates_SingleFile(coords: list[str], file: h5py.File):
-    for st in file:
-        group = file[st]
-        if isinstance(group, h5py.Group):
-            if any([k.startswith("X") for k in group if k is not None]):
-                # cell-centered coords
-                xc = {
-                    c: (
-                        np.asarray(xi[:])
-                        if isinstance(xi := group[f"X{i+1}"], h5py.Dataset) and xi
-                        else None
-                    )
-                    for i, c in enumerate(coords[::-1])
-                }
-                # cell edges
-                xe_min = {
-                    f"{c}_1": (
-                        c,
-                        (
-                            np.asarray(xi[:-1])
-                            if isinstance((xi := group[f"X{i+1}e"]), h5py.Dataset)
-                            else None
-                        ),
-                    )
-                    for i, c in enumerate(coords[::-1])
-                }
-                xe_max = {
-                    f"{c}_2": (
-                        c,
-                        (
-                            np.asarray(xi[1:])
-                            if isinstance((xi := group[f"X{i+1}e"]), h5py.Dataset)
-                            else None
-                        ),
-                    )
-                    for i, c in enumerate(coords[::-1])
-                }
-                return {"x_c": xc, "x_emin": xe_min, "x_emax": xe_max}
-        else:
-            raise ValueError(f"Unexpected type {type(file[st])}")
-    raise ValueError("Could not find coordinates in file")
-
-
-def _preload_field_SingleFile(
-    k: str,
-    dim: int,
-    ngh: int,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    coords: list[str],
-    xc_coords: dict[str, str],
-    xe_min_coords: dict[str, str],
-    xe_max_coords: dict[str, str],
-    coord_replacements: list[tuple[str, str]],
-    field_replacements: list[tuple[str, str]],
-    layout: str,
-    file: h5py.File,
-):
-    if dim == 1:
-        noghosts = slice(ngh, -ngh) if ngh > 0 else slice(None)
-    elif dim == 2:
-        noghosts = (slice(ngh, -ngh), slice(ngh, -ngh)) if ngh > 0 else slice(None)
-    elif dim == 3:
-        noghosts = (
-            (slice(ngh, -ngh), slice(ngh, -ngh), slice(ngh, -ngh))
-            if ngh > 0
-            else slice(None)
-        )
-    else:
-        raise ValueError("Invalid dimension")
-
-    dask_arrays = []
-    for s in outsteps:
-        dset = file[f"{s}/{k}"]
-        if isinstance(dset, h5py.Dataset):
-            array = from_array(np.transpose(dset) if layout == "right" else dset)
-            dask_arrays.append(array[noghosts])
-        else:
-            raise ValueError(f"Unexpected type {type(dset)}")
-
-    k_ = k[1:]
-    for c in coord_replacements:
-        if "_" not in k_:
-            k_ = k_.replace(c[0], c[1])
-        else:
-            k_ = "_".join([k_.split("_")[0].replace(c[0], c[1])] + k_.split("_")[1:])
-    for f in field_replacements:
-        k_ = k_.replace(*f)
-
-    return k_, xr.DataArray(
-        stack(dask_arrays, axis=0),
-        dims=["t", *coords],
-        name=k_,
-        coords={
-            "t": times,
-            "s": ("t", steps),
-            **xc_coords,
-            **xe_min_coords,
-            **xe_max_coords,
-        },
-    )
+from nt2.containers.utils import (
+    _read_category_metadata,
+    _read_coordinates,
+    _preload_field,
+)
 
 
 class FieldsContainer(Container):
@@ -134,50 +32,64 @@ class FieldsContainer(Container):
         }
         if self.configs["single_file"]:
             assert self.master_file is not None, "Master file not found"
-            self.metadata["fields"] = _read_category_metadata_SingleFile(
-                "f", self.master_file
+            self.metadata["fields"] = _read_category_metadata(
+                True, "f", self.master_file
             )
         else:
+            field_path = os.path.join(self.path, "fields")
+            files = sorted(os.listdir(field_path))
             try:
-                raise NotImplementedError("Multiple files not yet supported")
+                self.fields_files = [
+                    h5py.File(os.path.join(field_path, f), "r") for f in files
+                ]
             except OSError:
-                raise OSError(f"Could not open file {self.path}")
+                raise OSError(f"Could not open file in {field_path}")
+            self.metadata["fields"] = _read_category_metadata(
+                False, "f", self.fields_files
+            )
 
         coords = list(CoordinateDict[self.configs["coordinates"]].values())[::-1][
             -self.configs["dimension"] :
         ]
 
         if self.configs["single_file"]:
-            self.mesh = _read_coordinates_SingleFile(coords, self.master_file)
+            assert self.master_file is not None, "Master file not found"
+            self.mesh = _read_coordinates(coords, self.master_file)
         else:
-            raise NotImplementedError("Multiple files not yet supported")
+            self.mesh = _read_coordinates(coords, self.fields_files[0])
 
-        self.fields = xr.Dataset()
+        self._fields = xr.Dataset()
 
         if len(self.metadata["fields"]["outsteps"]) > 0:
-            if self.configs["single_file"]:
-                for k in self.metadata["fields"]["quantities"]:
-                    name, dset = _preload_field_SingleFile(
-                        k,
-                        dim=self.configs["dimension"],
-                        ngh=self.configs["ngh"],
-                        outsteps=self.metadata["fields"]["outsteps"],
-                        times=self.metadata["fields"]["times"],
-                        steps=self.metadata["fields"]["steps"],
-                        coords=coords,
-                        xc_coords=self.mesh["x_c"],
-                        xe_min_coords=self.mesh["x_emin"],
-                        xe_max_coords=self.mesh["x_emax"],
-                        coord_replacements=list(
-                            CoordinateDict[self.configs["coordinates"]].items()
-                        ),
-                        field_replacements=list(QuantityDict.items()),
-                        layout=self.configs["layout"],
-                        file=self.master_file,
-                    )
-                    self.fields[name] = dset
-            else:
-                raise NotImplementedError("Multiple files not yet supported")
+            for k in self.metadata["fields"]["quantities"]:
+                name, dset = _preload_field(
+                    single_file=self.configs["single_file"],
+                    k=k,
+                    dim=self.configs["dimension"],
+                    ngh=self.configs["ngh"],
+                    outsteps=self.metadata["fields"]["outsteps"],
+                    times=self.metadata["fields"]["times"],
+                    steps=self.metadata["fields"]["steps"],
+                    coords=coords,
+                    xc_coords=self.mesh["x_c"],
+                    xe_min_coords=self.mesh["x_emin"],
+                    xe_max_coords=self.mesh["x_emax"],
+                    coord_replacements=list(
+                        CoordinateDict[self.configs["coordinates"]].items()
+                    ),
+                    field_replacements=list(QuantityDict.items()),
+                    layout=self.configs["layout"],
+                    file=(
+                        self.master_file
+                        if self.configs["single_file"] and self.master_file is not None
+                        else self.fields_files
+                    ),
+                )
+                self.fields[name] = dset
+
+    @property
+    def fields(self):
+        return self._fields
 
     def __del__(self):
         if self.configs["single_file"] and self.master_file is not None:

@@ -1,91 +1,11 @@
+import os
 import h5py
-import numpy as np
-import xarray as xr
-from dask.array.core import from_array
-
-
 from nt2.containers.container import Container
-from nt2.containers.utils import _read_category_metadata_SingleFile
-
-
-def _list_to_ragged(arr):
-    max_len = np.max([len(a) for a in arr])
-    return map(
-        lambda a: np.concatenate([a, np.full(max_len - len(a), np.nan)]),
-        arr,
-    )
-
-
-def _read_species_SingleFile(first_step: int, file: h5py.File):
-    group = file[first_step]
-    if not isinstance(group, h5py.Group):
-        raise ValueError(f"Unexpected type {type(group)}")
-    species = np.unique(
-        [int(pq.split("_")[1]) for pq in group.keys() if pq.startswith("p")]
-    )
-    return species
-
-
-def _preload_particle_species_SingleFile(
-    s: int,
-    quantities: list[str],
-    coord_type: str,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    coord_replacements: dict[str, str],
-    file: h5py.File,
-):
-    prtl_data = {}
-    for q in [
-        f"X1_{s}",
-        f"X2_{s}",
-        f"X3_{s}",
-        f"U1_{s}",
-        f"U2_{s}",
-        f"U3_{s}",
-        f"W_{s}",
-    ]:
-        if q[0] in ["X", "U"]:
-            q_ = coord_replacements[q.split("_")[0]]
-        else:
-            q_ = q.split("_")[0]
-        if "p" + q not in quantities:
-            continue
-        if q not in prtl_data.keys():
-            prtl_data[q_] = []
-        for step_k in outsteps:
-            group = file[step_k]
-            if isinstance(group, h5py.Group):
-                if "p" + q in group.keys():
-                    prtl_data[q_].append(group["p" + q])
-                else:
-                    prtl_data[q_].append(np.full_like(prtl_data[q_][-1], np.nan))
-            else:
-                raise ValueError(f"Unexpected type {type(file[step_k])}")
-        prtl_data[q_] = _list_to_ragged(prtl_data[q_])
-        prtl_data[q_] = from_array(list(prtl_data[q_]))
-        prtl_data[q_] = xr.DataArray(
-            prtl_data[q_],
-            dims=["t", "id"],
-            name=q_,
-            coords={"t": times, "s": ("t", steps)},
-        )
-    if coord_type == "sph":
-        prtl_data["x"] = (
-            prtl_data[coord_replacements["X1"]]
-            * np.sin(prtl_data[coord_replacements["X2"]])
-            * np.cos(prtl_data[coord_replacements["X3"]])
-        )
-        prtl_data["y"] = (
-            prtl_data[coord_replacements["X1"]]
-            * np.sin(prtl_data[coord_replacements["X2"]])
-            * np.sin(prtl_data[coord_replacements["X3"]])
-        )
-        prtl_data["z"] = prtl_data[coord_replacements["X1"]] * np.cos(
-            prtl_data[coord_replacements["X2"]]
-        )
-    return xr.Dataset(prtl_data)
+from nt2.containers.utils import (
+    _read_category_metadata,
+    _read_particle_species,
+    _preload_particle_species,
+)
 
 
 class ParticleContainer(Container):
@@ -112,28 +32,48 @@ class ParticleContainer(Container):
 
         if self.configs["single_file"]:
             assert self.master_file is not None, "Master file not found"
-            self.metadata["particles"] = _read_category_metadata_SingleFile(
-                "p", self.master_file
+            self.metadata["particles"] = _read_category_metadata(
+                True, "p", self.master_file
+            )
+        else:
+            particle_path = os.path.join(self.path, "particles")
+            files = sorted(os.listdir(particle_path))
+            try:
+                self.particle_files = [
+                    h5py.File(os.path.join(particle_path, f), "r") for f in files
+                ]
+            except OSError:
+                raise OSError(f"Could not open file in {particle_path}")
+            self.metadata["particles"] = _read_category_metadata(
+                False, "p", self.particle_files
             )
         self._particles = {}
 
         if len(self.metadata["particles"]["outsteps"]) > 0:
             if self.configs["single_file"]:
                 assert self.master_file is not None, "Master file not found"
-                species = _read_species_SingleFile(
+                species = _read_particle_species(
                     self.metadata["particles"]["outsteps"][0], self.master_file
                 )
-                for s in species:
-                    self._particles[s] = _preload_particle_species_SingleFile(
-                        s=s,
-                        quantities=self.metadata["particles"]["quantities"],
-                        coord_type=self.configs["coordinates"],
-                        outsteps=self.metadata["particles"]["outsteps"],
-                        times=self.metadata["particles"]["times"],
-                        steps=self.metadata["particles"]["steps"],
-                        coord_replacements=PrtlDict[self.configs["coordinates"]],
-                        file=self.master_file,
-                    )
+            else:
+                species = _read_particle_species("Step0", self.particle_files[0])
+            self.metadata["particles"]["species"] = species
+            for s in species:
+                self._particles[s] = _preload_particle_species(
+                    self.configs["single_file"],
+                    s=s,
+                    quantities=self.metadata["particles"]["quantities"],
+                    coord_type=self.configs["coordinates"],
+                    outsteps=self.metadata["particles"]["outsteps"],
+                    times=self.metadata["particles"]["times"],
+                    steps=self.metadata["particles"]["steps"],
+                    coord_replacements=PrtlDict[self.configs["coordinates"]],
+                    file=(
+                        self.master_file
+                        if self.configs["single_file"] and self.master_file is not None
+                        else self.particle_files
+                    ),
+                )
 
     @property
     def particles(self):

@@ -1,60 +1,14 @@
+import os
 import h5py
-import numpy as np
 import xarray as xr
-from dask.array.core import from_array
-from dask.array.core import stack
 
 from nt2.containers.container import Container
-from nt2.containers.utils import _read_category_metadata_SingleFile
-
-
-def _read_species_SingleFile(first_step: int, file: h5py.File):
-    group = file[first_step]
-    if not isinstance(group, h5py.Group):
-        raise ValueError(f"Unexpected type {type(group)}")
-    species = np.unique(
-        [int(pq.split("_")[1]) for pq in group.keys() if pq.startswith("sN")]
-    )
-    return species
-
-
-def _read_spectra_bins_SingleFile(first_step: int, log_bins: bool, file: h5py.File):
-    group = file[first_step]
-    if not isinstance(group, h5py.Group):
-        raise ValueError(f"Unexpected type {type(group)}")
-    e_bins = group["sEbn"]
-    if not isinstance(e_bins, h5py.Dataset):
-        raise ValueError(f"Unexpected type {type(e_bins)}")
-    if log_bins:
-        e_bins = np.sqrt(e_bins[1:] * e_bins[:-1])
-    else:
-        e_bins = (e_bins[1:] + e_bins[:-1]) / 2
-    return e_bins
-
-
-def _preload_spectra_SingleFile(
-    sp: int,
-    e_bins: np.ndarray,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    file: h5py.File,
-):
-    dask_arrays = []
-    for st in outsteps:
-        array = from_array(file[f"{st}/sN_{sp}"])
-        dask_arrays.append(array)
-
-    return xr.DataArray(
-        stack(dask_arrays, axis=0),
-        dims=["t", "e"],
-        name=f"n_{sp}",
-        coords={
-            "t": times,
-            "s": ("t", steps),
-            "e": e_bins,
-        },
-    )
+from nt2.containers.utils import (
+    _read_category_metadata,
+    _read_spectra_species,
+    _read_spectra_bins,
+    _preload_spectra,
+)
 
 
 class SpectraContainer(Container):
@@ -70,8 +24,20 @@ class SpectraContainer(Container):
 
         if self.configs["single_file"]:
             assert self.master_file is not None, "Master file not found"
-            self.metadata["spectra"] = _read_category_metadata_SingleFile(
-                "s", self.master_file
+            self.metadata["spectra"] = _read_category_metadata(
+                True, "s", self.master_file
+            )
+        else:
+            spectra_path = os.path.join(self.path, "spectra")
+            files = sorted(os.listdir(spectra_path))
+            try:
+                self.spectra_files = [
+                    h5py.File(os.path.join(spectra_path, f), "r") for f in files
+                ]
+            except OSError:
+                raise OSError(f"Could not open file {spectra_path}")
+            self.metadata["spectra"] = _read_category_metadata(
+                False, "s", self.spectra_files
             )
         self._spectra = xr.Dataset()
         log_bins = self.attrs["output.spectra.log_bins"]
@@ -79,24 +45,33 @@ class SpectraContainer(Container):
         if len(self.metadata["spectra"]["outsteps"]) > 0:
             if self.configs["single_file"]:
                 assert self.master_file is not None, "Master file not found"
-                species = _read_species_SingleFile(
-                    self.metadata["spectra"]["outsteps"][0], self.master_file
+                species = _read_spectra_species(
+                    f'Step{self.metadata["spectra"]["outsteps"][0]}', self.master_file
+                )
+                e_bins = _read_spectra_bins(
+                    f'Step{self.metadata["spectra"]["outsteps"][0]}',
+                    log_bins,
+                    self.master_file,
                 )
             else:
-                raise NotImplementedError("Multiple files not yet supported")
+                species = _read_spectra_species("Step0", self.spectra_files[0])
+                e_bins = _read_spectra_bins("Step0", log_bins, self.spectra_files[0])
 
-            e_bins = _read_spectra_bins_SingleFile(
-                self.metadata["spectra"]["outsteps"][0], log_bins, self.master_file
-            )
+            self.metadata["spectra"]["species"] = species
 
             for sp in species:
-                self._spectra[f"n_{sp}"] = _preload_spectra_SingleFile(
+                self._spectra[f"n_{sp}"] = _preload_spectra(
+                    self.configs["single_file"],
                     sp,
-                    e_bins,
-                    self.metadata["spectra"]["outsteps"],
-                    self.metadata["spectra"]["times"],
-                    self.metadata["spectra"]["steps"],
-                    self.master_file,
+                    e_bins=e_bins,
+                    outsteps=self.metadata["spectra"]["outsteps"],
+                    times=self.metadata["spectra"]["times"],
+                    steps=self.metadata["spectra"]["steps"],
+                    file=(
+                        self.master_file
+                        if self.configs["single_file"] and self.master_file is not None
+                        else self.spectra_files
+                    ),
                 )
 
     @property

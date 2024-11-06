@@ -1,3 +1,4 @@
+import os
 import h5py
 import numpy as np
 from typing import Any
@@ -40,22 +41,29 @@ class Container:
             except OSError:
                 raise OSError(f"Could not open file {self.path}")
         else:
-            self.master_file: h5py.File | None = None
-            raise NotImplementedError("Multiple files not yet supported")
+            field_path = os.path.join(self.path, "fields")
+            file = os.path.join(field_path, os.listdir(field_path)[0])
+            try:
+                self.master_file: h5py.File | None = h5py.File(file, "r")
+            except OSError:
+                raise OSError(f"Could not open file {file}")
 
         self.attrs = _read_attribs_SingleFile(self.master_file)
 
-        if self.configs["single_file"]:
-            self.configs["ngh"] = int(self.master_file.attrs.get("NGhosts", 0))
-            self.configs["layout"] = (
-                "right" if self.master_file.attrs.get("LayoutRight", 1) == 1 else "left"
-            )
-            self.configs["dimension"] = int(self.master_file.attrs.get("Dimension", 1))
-            self.configs["coordinates"] = self.master_file.attrs.get(
-                "Coordinates", b"cart"
-            ).decode("UTF-8")
-            if self.configs["coordinates"] == "qsph":
-                self.configs["coordinates"] = "sph"
+        self.configs["ngh"] = int(self.master_file.attrs.get("NGhosts", 0))
+        self.configs["layout"] = (
+            "right" if self.master_file.attrs.get("LayoutRight", 1) == 1 else "left"
+        )
+        self.configs["dimension"] = int(self.master_file.attrs.get("Dimension", 1))
+        self.configs["coordinates"] = self.master_file.attrs.get(
+            "Coordinates", b"cart"
+        ).decode("UTF-8")
+        if self.configs["coordinates"] == "qsph":
+            self.configs["coordinates"] = "sph"
+
+        if not self.configs["single_file"]:
+            self.master_file.close()
+            self.master_file = None
             # if coordinates == "sph":
             #     self.metric = SphericalMetric()
             # else:
@@ -107,7 +115,6 @@ class Container:
     def print_container(self) -> str:
         return f"Client {self.client}\n"
 
-    #
     # def makeMovie(self, plot, makeframes=True, **kwargs):
     #     """
     #     Makes a movie from a plot function
