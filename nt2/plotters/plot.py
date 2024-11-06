@@ -2,7 +2,8 @@ def annotatePulsar(
     ax, data, rmax, rstar=1.1, ti=None, time=None, attrs={}, ax_props={}, star_props={}
 ):
     import numpy as np
-    import matplotlib as mpl
+    from matplotlib import lines
+    from matplotlib import patches
 
     if ti is None and time is None:
         raise ValueError("Must provide either ti or time")
@@ -21,6 +22,7 @@ def annotatePulsar(
             "WARNING: No spinup time or spin period found, please specify explicitly as `attrs = {'psr_omega': ..., 'psr_spinup_time': ...}`"
         )
         demo_rotation = False
+        phase = 0
     else:
         phase = (
             omega
@@ -45,7 +47,7 @@ def annotatePulsar(
     for i in range(-int(rmax * 0.8) // 2 - 1, int(rmax * 0.8) // 2):
         if i != -1:
             ax.add_artist(
-                mpl.lines.Line2D(
+                lines.Line2D(
                     [0, -0.1],
                     [2 * (i + 1), 2 * (i + 1)],
                     color=ax_props.get("color", "k"),
@@ -85,7 +87,7 @@ def annotatePulsar(
         xs = np.concatenate([xs1, xs2[::-1]])
         ys = np.concatenate([ys1, ys2[::-1]])
         ax.add_artist(
-            mpl.patches.Polygon(
+            patches.Polygon(
                 (rstar + 0.02) * np.array([xs, ys]).T,
                 color=star_props.get("c1", "r"),
                 lw=0,
@@ -94,7 +96,7 @@ def annotatePulsar(
             )
         )
         ax.add_artist(
-            mpl.patches.Polygon(
+            patches.Polygon(
                 (rstar + 0.02) * np.array([-xs, ys]).T,
                 color=star_props.get("c2", "b"),
                 lw=0,
@@ -103,7 +105,7 @@ def annotatePulsar(
             )
         )
     ax.add_artist(
-        mpl.patches.Circle(
+        patches.Circle(
             (0, 0),
             rstar,
             color=star_props.get("color", "royalblue"),
