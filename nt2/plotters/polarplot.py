@@ -128,7 +128,7 @@ class DatasetPolarPlotAccessor:
             else:
                 raise ValueError("Unknown sampling template: " + template)
 
-        fieldlines = self.fieldlines(fr, fth, start_points, **kwargs).compute()
+        fieldlines = self.fieldlines(fr, fth, start_points, **kwargs)
         ax = kwargs.pop("ax", plt.gca())
         for fieldline in fieldlines:
             if invert_x:
@@ -137,7 +137,6 @@ class DatasetPolarPlotAccessor:
                 fieldline[:, 1] = -fieldline[:, 1]
             ax.plot(*fieldline.T, **kwargs)
 
-    @delayed
     def fieldlines(self, fr, fth, start_points, **kwargs):
         """
         Compute field lines of a vector field defined by functions fr and fth.
