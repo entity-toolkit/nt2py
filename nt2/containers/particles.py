@@ -37,19 +37,23 @@ class ParticleContainer(Container):
             )
         else:
             particle_path = os.path.join(self.path, "particles")
-            files = sorted(os.listdir(particle_path))
-            try:
-                self.particle_files = [
-                    h5py.File(os.path.join(particle_path, f), "r") for f in files
-                ]
-            except OSError:
-                raise OSError(f"Could not open file in {particle_path}")
-            self.metadata["particles"] = _read_category_metadata(
-                False, "p", self.particle_files
-            )
+            if os.path.isdir(particle_path):
+                files = sorted(os.listdir(particle_path))
+                try:
+                    self.particle_files = [
+                        h5py.File(os.path.join(particle_path, f), "r") for f in files
+                    ]
+                except OSError:
+                    raise OSError(f"Could not open file in {particle_path}")
+                self.metadata["particles"] = _read_category_metadata(
+                    False, "p", self.particle_files
+                )
         self._particles = {}
 
-        if len(self.metadata["particles"]["outsteps"]) > 0:
+        if (
+            "particles" in self.metadata
+            and len(self.metadata["particles"]["outsteps"]) > 0
+        ):
             if self.configs["single_file"]:
                 assert self.master_file is not None, "Master file not found"
                 species = _read_particle_species(
@@ -78,6 +82,11 @@ class ParticleContainer(Container):
     @property
     def particles(self):
         return self._particles
+
+    def __del__(self):
+        if not self.configs["single_file"]:
+            for f in self.particle_files:
+                f.close()
 
     def print_particles(self) -> str:
         def sizeof_fmt(num, suffix="B"):

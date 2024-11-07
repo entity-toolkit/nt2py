@@ -33,5 +33,4 @@ class Data(FieldsContainer, ParticleContainer, SpectraContainer):
         return self.__repr__()
 
     def __del__(self):
-        self.client.close()
         super().__del__()

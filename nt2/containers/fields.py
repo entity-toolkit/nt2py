@@ -37,16 +37,17 @@ class FieldsContainer(Container):
             )
         else:
             field_path = os.path.join(self.path, "fields")
-            files = sorted(os.listdir(field_path))
-            try:
-                self.fields_files = [
-                    h5py.File(os.path.join(field_path, f), "r") for f in files
-                ]
-            except OSError:
-                raise OSError(f"Could not open file in {field_path}")
-            self.metadata["fields"] = _read_category_metadata(
-                False, "f", self.fields_files
-            )
+            if os.path.isdir(field_path):
+                files = sorted(os.listdir(field_path))
+                try:
+                    self.fields_files = [
+                        h5py.File(os.path.join(field_path, f), "r") for f in files
+                    ]
+                except OSError:
+                    raise OSError(f"Could not open file in {field_path}")
+                self.metadata["fields"] = _read_category_metadata(
+                    False, "f", self.fields_files
+                )
 
         coords = list(CoordinateDict[self.configs["coordinates"]].values())[::-1][
             -self.configs["dimension"] :
@@ -60,7 +61,7 @@ class FieldsContainer(Container):
 
         self._fields = xr.Dataset()
 
-        if len(self.metadata["fields"]["outsteps"]) > 0:
+        if "fields" in self.metadata and len(self.metadata["fields"]["outsteps"]) > 0:
             for k in self.metadata["fields"]["quantities"]:
                 name, dset = _preload_field(
                     single_file=self.configs["single_file"],
@@ -92,19 +93,15 @@ class FieldsContainer(Container):
         return self._fields
 
     def __del__(self):
-        if self.configs["single_file"] and self.master_file is not None:
-            self.master_file.close()
-        else:
-            raise NotImplementedError("Multiple files not yet supported")
+        if not self.configs["single_file"]:
+            for f in self.fields_files:
+                f.close()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.configs["single_file"] and self.master_file is not None:
-            self.master_file.close()
-        else:
-            raise NotImplementedError("Multiple files not yet supported")
+        self.__del__()
 
     def print_fields(self) -> str:
         def sizeof_fmt(num, suffix="B"):

@@ -29,20 +29,21 @@ class SpectraContainer(Container):
             )
         else:
             spectra_path = os.path.join(self.path, "spectra")
-            files = sorted(os.listdir(spectra_path))
-            try:
-                self.spectra_files = [
-                    h5py.File(os.path.join(spectra_path, f), "r") for f in files
-                ]
-            except OSError:
-                raise OSError(f"Could not open file {spectra_path}")
-            self.metadata["spectra"] = _read_category_metadata(
-                False, "s", self.spectra_files
-            )
+            if os.path.isdir(spectra_path):
+                files = sorted(os.listdir(spectra_path))
+                try:
+                    self.spectra_files = [
+                        h5py.File(os.path.join(spectra_path, f), "r") for f in files
+                    ]
+                except OSError:
+                    raise OSError(f"Could not open file {spectra_path}")
+                self.metadata["spectra"] = _read_category_metadata(
+                    False, "s", self.spectra_files
+                )
         self._spectra = xr.Dataset()
         log_bins = self.attrs["output.spectra.log_bins"]
 
-        if len(self.metadata["spectra"]["outsteps"]) > 0:
+        if "spectra" in self.metadata and len(self.metadata["spectra"]["outsteps"]) > 0:
             if self.configs["single_file"]:
                 assert self.master_file is not None, "Master file not found"
                 species = _read_spectra_species(
@@ -73,6 +74,11 @@ class SpectraContainer(Container):
                         else self.spectra_files
                     ),
                 )
+
+    def __del__(self):
+        if not self.configs["single_file"]:
+            for f in self.spectra_files:
+                f.close()
 
     @property
     def spectra(self):

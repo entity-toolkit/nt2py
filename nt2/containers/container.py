@@ -69,6 +69,12 @@ class Container:
             # else:
             #     self.metric = MinkowskiMetric()
 
+    def __del__(self):
+        if self.master_file is not None:
+            self.master_file.close()
+        if self.client.status == "running":
+            self.client.close()
+
     def plotGrid(self, ax, **kwargs):
         from matplotlib import patches
 
