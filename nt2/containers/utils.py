@@ -35,23 +35,20 @@ def _read_category_metadata(
         else:
             assert isinstance(file[i], h5py.File)
             group = st["Step0"]
-        if isinstance(group, h5py.Group):
-            if any([k.startswith(prefix) for k in group if k is not None]):
-                if quantities is None:
-                    quantities = [k for k in group.keys() if k.startswith(prefix)]
-                outsteps.append(st if single_file else f"Step{i}")
-                time_ds = group["Time"]
-                if isinstance(time_ds, h5py.Dataset):
-                    times.append(time_ds[()])
-                else:
-                    raise ValueError(f"Unexpected type {type(time_ds)}")
-                step_ds = group["Step"]
-                if isinstance(step_ds, h5py.Dataset):
-                    steps.append(int(step_ds[()]))
-                else:
-                    raise ValueError(f"Unexpected type {type(step_ds)}")
-        else:
-            raise ValueError("Unexpected type")
+        assert isinstance(group, h5py.Group), f"Unexpected type {type(group)}"
+        time_ds = group["Time"]
+        step_ds = group["Step"]
+        assert isinstance(time_ds, h5py.Dataset), f"Unexpected type {type(time_ds)}"
+        assert isinstance(step_ds, h5py.Dataset), f"Unexpected type {type(step_ds)}"
+        if single_file and not any(
+            [k.startswith(prefix) for k in group if k is not None]
+        ):
+            continue
+        if quantities is None or len(quantities) == 0:
+            quantities = [k for k in group.keys() if k.startswith(prefix)]
+        outsteps.append(st if single_file else f"Step{i}")
+        times.append(time_ds[()])
+        steps.append(int(step_ds[()]))
     outsteps = sorted(outsteps, key=lambda x: int(x.replace("Step", "")))
     steps = sorted(steps)
     times = np.array(sorted(times), dtype=np.float64)
