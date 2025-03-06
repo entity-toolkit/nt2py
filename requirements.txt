@@ -11,7 +11,6 @@ cycler>=0.11.0
 dask>=2023.1.0
 fonttools>=4.38.0
 fsspec>=2023.1.0
-h5pickle>=0.4.2
 h5py>=3.8.0
 holoviews>=1.15.4
 hvplot>=0.8.2
