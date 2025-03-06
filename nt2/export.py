@@ -26,7 +26,7 @@ def _makeFramesAndMovie(name, data, plot, times, **kwargs):
         raise ValueError("Failed to make frames")
 
 
-def makeMovie(**kwargs):
+def makeMovie(**ffmpeg_kwargs):
     """
     Create a movie from frames using the `ffmpeg` command-line tool.
 
@@ -47,30 +47,29 @@ def makeMovie(**kwargs):
 
     Examples
     --------
-    >>> makeMovie(ffmpeg="/path/to/ffmpeg", framerate="30", start="0", input="step_", number=3,
-                  extension="png", compression="1", overwrite=True, output="anim.mp4")
-
+    >>> makeMovie(ffmpeg="/path/to/ffmpeg", framerate=30, start=0, input="step_", number=3,
+                  extension="png", compression=1, overwrite=True, output="anim.mp4")
     """
     import subprocess
 
     command = [
-        kwargs.get("ffmpeg", "ffmpeg"),
+        ffmpeg_kwargs.get("ffmpeg", "ffmpeg"),
         "-nostdin",
         "-framerate",
-        kwargs.get("framerate", "30"),
+        str(ffmpeg_kwargs.get("framerate", 30)),
         "-start_number",
-        kwargs.get("start", "0"),
+        str(ffmpeg_kwargs.get("start", 0)),
         "-i",
-        kwargs.get("input", "step_")
-        + f"%0{kwargs.get('number', 3)}d.{kwargs.get('extension', 'png')}",
+        ffmpeg_kwargs.get("input", "step_")
+        + f"%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}",
         "-c:v",
         "libx264",
         "-crf",
-        kwargs.get("compression", "1"),
+        str(ffmpeg_kwargs.get("compression", 1)),
         "-filter_complex",
         "[0:v]format=yuv420p,pad=ceil(iw/2)*2:ceil(ih/2)*2",
-        "-y" if kwargs.get("overwrite", False) else None,
-        kwargs.get("output", "anim.mp4"),
+        "-y" if ffmpeg_kwargs.get("overwrite", False) else None,
+        ffmpeg_kwargs.get("output", "movie.mp4"),
     ]
     command = [str(c) for c in command if c is not None]
     print("Command:\n", " ".join(command))
