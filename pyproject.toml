@@ -7,7 +7,8 @@ name = "nt2py"
 dynamic = ["version"]
 dependencies = [
   "types-setuptools",
-  "dask",
+  "dask[distributed]",
+  "bokeh",
   "xarray",
   "numpy",
   "scipy",
@@ -35,6 +36,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
 ]
 
 [project.urls]
@@ -45,4 +47,3 @@ path = "nt2/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nt2"]
-
