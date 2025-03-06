@@ -3,6 +3,22 @@ import numpy as np
 import xarray as xr
 from dask.array.core import from_array
 from dask.array.core import stack
+import inspect
+
+
+def InheritClassDocstring(cls):
+    if cls.__doc__ is None:
+        cls.__doc__ = ""
+    for base in inspect.getmro(cls):
+        if base.__doc__ is not None:
+            cls.__doc__ += base.__doc__
+    return cls
+
+
+def _dataIs2DPolar(ds):
+    return ("r" in ds.dims and ("θ" in ds.dims or "th" in ds.dims)) and len(
+        ds.dims
+    ) == 2
 
 
 def _read_category_metadata(

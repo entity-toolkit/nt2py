@@ -1,13 +1,7 @@
-from dask.delayed import delayed
-import xarray as xr
 import numpy as np
 from typing import Any
 
-
-def DataIs2DPolar(ds):
-    return ("r" in ds.dims and ("θ" in ds.dims or "th" in ds.dims)) and len(
-        ds.dims
-    ) == 2
+from nt2.containers.utils import _dataIs2DPolar
 
 
 def DipoleSampling(**kwargs):
@@ -59,14 +53,13 @@ def MonopoleSampling(**kwargs):
     return np.linspace(0, np.pi, nth + 2)[1:-1]
 
 
-@xr.register_dataset_accessor("polar")
-class DatasetPolarPlotAccessor:
+class _datasetPolarPlotAccessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
     def pcolor(self, value, **kwargs):
         assert "t" not in self._obj[value].dims, "Time must be specified"
-        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
         self._obj[value].polar.pcolor(**kwargs)
 
     def fieldplot(
@@ -173,7 +166,7 @@ class DatasetPolarPlotAccessor:
 
         assert "t" not in self._obj[fr].dims, "Time must be specified"
         assert "t" not in self._obj[fth].dims, "Time must be specified"
-        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
 
         useGreek = "θ" in self._obj.coords.keys()
 
@@ -249,8 +242,7 @@ class DatasetPolarPlotAccessor:
             return np.append(f2[::-1], f1, axis=0)
 
 
-@xr.register_dataarray_accessor("polar")
-class PolarPlotAccessor:
+class _polarPlotAccessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
@@ -329,7 +321,7 @@ class PolarPlotAccessor:
 
         assert ax.name != "polar", "`ax` must be a rectilinear projection"
         assert "t" not in self._obj.dims, "Time must be specified"
-        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
         if type(kwargs.get("norm", None)) is colors.LogNorm:
             cm = kwargs.get("cmap", "viridis")
@@ -464,7 +456,7 @@ class PolarPlotAccessor:
 
         assert ax.name != "polar", "`ax` must be a rectilinear projection"
         assert "t" not in self._obj.dims, "Time must be specified"
-        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
         r, th = np.meshgrid(
             self._obj.coords["r"], self._obj.coords["θ" if useGreek else "th"]

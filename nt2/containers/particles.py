@@ -9,6 +9,26 @@ from nt2.containers.utils import (
 
 
 class ParticleContainer(Container):
+    """
+    * * * * ParticleContainer : Container * * * *
+
+    Class for holding the particle data.
+
+    Attributes
+    ----------
+    particles : dict
+        The dictionary of particle species.
+
+    particle_files : list
+        The list of opened particle files.
+
+    Methods
+    -------
+    print_particles()
+        Prints the basic information about the particle data.
+
+    """
+
     def __init__(self, **kwargs):
         super(ParticleContainer, self).__init__(**kwargs)
         PrtlDict = {

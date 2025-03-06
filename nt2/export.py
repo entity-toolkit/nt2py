@@ -1,43 +1,76 @@
-def makeMovie(**ffmpeg_kwargs):
+def _makeFramesAndMovie(name, data, plot, times, **kwargs):
+    num_cpus = kwargs.pop("num_cpus", None)
+    if all(
+        makeFrames(
+            plot=plot,
+            times=times,
+            fpath=f"{name}/frames",
+            data=data,
+            num_cpus=num_cpus,
+        )
+    ):
+        print(f"Frames saved in {name}/frames")
+        output = kwargs.pop("output", f"{name}.mp4")
+        if makeMovie(
+            input=f"{name}/frames/",
+            overwrite=True,
+            output=output,
+            number=5,
+            **kwargs,
+        ):
+            print(f"Movie {name}.mp4 created successfully")
+            return True
+        else:
+            return False
+    else:
+        raise ValueError("Failed to make frames")
+
+
+def makeMovie(**kwargs):
     """
     Create a movie from frames using the `ffmpeg` command-line tool.
+
     Parameters
     ----------
-    ffmpeg_kwargs : dict
+    kwargs : dict
         Keyword arguments for the `ffmpeg` command-line tool.
+
     Returns
     -------
     bool
         True if the movie was created successfully, False otherwise.
+
     Notes
     -----
     This function uses the `subprocess` module to execute the `ffmpeg` command-line
     tool with the given arguments.
+
     Examples
     --------
     >>> makeMovie(ffmpeg="/path/to/ffmpeg", framerate="30", start="0", input="step_", number=3,
                   extension="png", compression="1", overwrite=True, output="anim.mp4")
+
     """
     import subprocess
 
     command = [
-        ffmpeg_kwargs.get("ffmpeg", "ffmpeg"),
+        kwargs.get("ffmpeg", "ffmpeg"),
         "-nostdin",
         "-framerate",
-        ffmpeg_kwargs.get("framerate", "30"),
+        kwargs.get("framerate", "30"),
         "-start_number",
-        ffmpeg_kwargs.get("start", "0"),
+        kwargs.get("start", "0"),
         "-i",
-        ffmpeg_kwargs.get("input", "step_")
-        + f"%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}",
+        kwargs.get("input", "step_")
+        + f"%0{kwargs.get('number', 3)}d.{kwargs.get('extension', 'png')}",
         "-c:v",
         "libx264",
         "-crf",
-        ffmpeg_kwargs.get("compression", "1"),
+        kwargs.get("compression", "1"),
         "-filter_complex",
         "[0:v]format=yuv420p,pad=ceil(iw/2)*2:ceil(ih/2)*2",
-        "-y" if ffmpeg_kwargs.get("overwrite", False) else None,
-        ffmpeg_kwargs.get("output", "anim.mp4"),
+        "-y" if kwargs.get("overwrite", False) else None,
+        kwargs.get("output", "anim.mp4"),
     ]
     command = [str(c) for c in command if c is not None]
     print("Command:\n", " ".join(command))
@@ -51,37 +84,49 @@ def makeMovie(**ffmpeg_kwargs):
         return False
 
 
-def makeFrames(plot, steps, fpath, data=None, num_cpus=None):
+def makeFrames(plot, times, fpath, data=None, num_cpus=None):
     """
     Create plot frames from a set of timesteps of the same dataset.
+
     Parameters
     ----------
     plot : function
         A function that generates and saves the plot. The function must take a time index
-        as an argument.
-    steps : array_like, optional
+        or a timestamp as an argument and, optionally, the data object.
+
+    times : array_like, optional
         The time indices to use for generating the movie.
+        Can either be timestep indices or timestamps.
+        Must coincide with the time accepted by the `plot` function.
+
     fpath : str
         The file path to save the frames.
+
     data : xarray.Dataset, optional
         The dataset to use for generating the movie (passed to plot as the second argument)
+
     num_cpus : int, optional
         The number of CPUs to use for parallel processing. If None, use all available CPUs.
+
     Returns
     -------
     list
         A list of results returned by the `plot` function, one for each time index.
+
     Raises
     ------
     ValueError
         If `plot` is not a callable function.
+
     Notes
     -----
     This function uses the `multiprocessing` module to parallelize the generation
     of the plots, and `tqdm` module to display a progress bar.
+
     Examples
     --------
     >>> makeFrames(plot_func, range(100), 'output/', num_cpus=16)
+
     """
 
     from tqdm import tqdm
@@ -113,6 +158,6 @@ def makeFrames(plot, steps, fpath, data=None, num_cpus=None):
     if not os.path.exists(fpath):
         os.makedirs(fpath)
 
-    tasks = [[ti, t, fpath] for ti, t in enumerate(steps)]
+    tasks = [[ti, t, fpath] for ti, t in enumerate(times)]
     results = [pool.apply_async(plotAndSave, t) for t in tasks]
     return [result.get() for result in tqdm(results)]

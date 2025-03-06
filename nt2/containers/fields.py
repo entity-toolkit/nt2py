@@ -9,8 +9,62 @@ from nt2.containers.utils import (
     _preload_field,
 )
 
+from nt2.plotters.polar import (
+    _datasetPolarPlotAccessor,
+    _polarPlotAccessor,
+)
+
+from nt2.plotters.inspect import _datasetInspectPlotAccessor
+from nt2.plotters.movie import _moviePlotAccessor
+
+from nt2.containers.utils import InheritClassDocstring
+
+
+@xr.register_dataset_accessor("polar")
+@InheritClassDocstring
+class DatasetPolarPlotAccessor(_datasetPolarPlotAccessor):
+    pass
+
+
+@xr.register_dataarray_accessor("polar")
+@InheritClassDocstring
+class PolarPlotAccessor(_polarPlotAccessor):
+    pass
+
+
+@xr.register_dataset_accessor("inspect")
+@InheritClassDocstring
+class DatasetInspectPlotAccessor(_datasetInspectPlotAccessor):
+    pass
+
+
+@xr.register_dataarray_accessor("movie")
+@InheritClassDocstring
+class MoviePlotAccessor(_moviePlotAccessor):
+    pass
+
 
 class FieldsContainer(Container):
+    """
+    * * * * FieldsContainer : Container * * * *
+
+    Class for hodling the field (grid-based) data.
+
+    Attributes
+    ----------
+    fields : xarray.Dataset
+        The xarray dataset for all the field quantities.
+
+    fields_files : list
+        The list of opened fields files.
+
+    Methods
+    -------
+    print_fields()
+        Prints the basic information about the field data.
+
+    """
+
     def __init__(self, **kwargs):
         super(FieldsContainer, self).__init__(**kwargs)
         QuantityDict = {

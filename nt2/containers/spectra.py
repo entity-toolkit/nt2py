@@ -12,6 +12,26 @@ from nt2.containers.utils import (
 
 
 class SpectraContainer(Container):
+    """
+    * * * * SpectraContainer : Container * * * *
+
+    Class for holding the spectra (energy distribution) data.
+
+    Attributes
+    ----------
+    spectra : xarray.Dataset
+        The xarray dataset of particle distributions.
+
+    spectra_files : list
+        The list of opened spectra files.
+
+    Methods
+    -------
+    print_spectra()
+        Prints the basic information about the spectra data.
+
+    """
+
     def __init__(self, **kwargs):
         super(SpectraContainer, self).__init__(**kwargs)
         assert "single_file" in self.configs

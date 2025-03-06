@@ -2,7 +2,6 @@ import os
 import h5py
 import numpy as np
 from typing import Any
-from dask.distributed import Client
 
 
 def _read_attribs_SingleFile(file: h5py.File):
@@ -17,15 +16,61 @@ def _read_attribs_SingleFile(file: h5py.File):
 
 
 class Container:
+    """
+    * * * * Container * * * *
+
+    Parent class for all data containers.
+
+    Args
+    ----
+    path : str
+        The path to the data.
+
+    Kwargs
+    ------
+    single_file : bool, optional
+        Whether the data is stored in a single file. Default is False.
+
+    pickle : bool, optional
+        Whether to use pickle for reading the data. Default is True.
+
+    greek : bool, optional
+        Whether to use Greek letters for the spherical coordinates. Default is False.
+
+    dask_props : dict, optional
+        Additional properties for Dask [NOT IMPLEMENTED]. Default is {}.
+
+    Attributes
+    ----------
+    path : str
+        The path to the data.
+
+    configs : dict
+        The configuration settings for the data.
+
+    metadata : dict
+        The metadata for the data.
+
+    mesh : dict
+        Coordinate grid of the domain (cell-centered & edges).
+
+    master_file : h5py.File
+        The master file for the data (from which the main attributes are read).
+
+    attrs : dict
+        The attributes of the master file.
+
+    Methods
+    -------
+    plotGrid(ax, **kwargs)
+        Plots the gridlines of the domain.
+
+    """
+
     def __init__(
         self, path, single_file=False, pickle=True, greek=False, dask_props={}
     ):
         super(Container, self).__init__()
-
-        self.client = Client(**dask_props)
-        if self.client.status == "running":
-            print("Dask client launched:")
-            print(self.client)
 
         self.configs: dict[str, Any] = {
             "single_file": single_file,
@@ -64,16 +109,10 @@ class Container:
         if not self.configs["single_file"]:
             self.master_file.close()
             self.master_file = None
-            # if coordinates == "sph":
-            #     self.metric = SphericalMetric()
-            # else:
-            #     self.metric = MinkowskiMetric()
 
     def __del__(self):
         if self.master_file is not None:
             self.master_file.close()
-        if self.client.status == "running":
-            self.client.close()
 
     def plotGrid(self, ax, **kwargs):
         from matplotlib import patches
@@ -117,45 +156,3 @@ class Container:
                     **options,
                 )
         ax.set(xlim=xlim, ylim=ylim)
-
-    def print_container(self) -> str:
-        return f"Client {self.client}\n"
-
-    # def makeMovie(self, plot, makeframes=True, **kwargs):
-    #     """
-    #     Makes a movie from a plot function
-    #
-    #     Parameters
-    #     ----------
-    #     plot : function
-    #         The plot function to use; accepts output timestep and dataset as arguments.
-    #     makeframes : bool, optional
-    #         Whether to make the frames, or just proceed to making the movie. Default is True.
-    #     num_cpus : int, optional
-    #         The number of CPUs to use for making the frames. Default is None.
-    #     **kwargs :
-    #         Additional keyword arguments passed to `ffmpeg`.
-    #     """
-    #     import numpy as np
-    #
-    #     if makeframes:
-    #         makemovie = all(
-    #             exp.makeFrames(
-    #                 plot,
-    #                 np.arange(len(self.t)),
-    #                 f"{self.attrs['simulation.name']}/frames",
-    #                 data=self,
-    #                 num_cpus=kwargs.pop("num_cpus", None),
-    #             )
-    #         )
-    #     else:
-    #         makemovie = True
-    #     if makemovie:
-    #         exp.makeMovie(
-    #             input=f"{self.attrs['simulation.name']}/frames/",
-    #             overwrite=True,
-    #             output=f"{self.attrs['simulation.name']}.mp4",
-    #             number=5,
-    #             **kwargs,
-    #         )
-    #         return True
