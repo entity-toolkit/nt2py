@@ -98,6 +98,17 @@ data.makeMovie(plot)
 
 > If using Jupyter notebook, you can quickly preview the loaded metadata by simply running a cell with just `data` in it (or in regular python, by doing `print(data)`).
 
+### Dashboard
+
+Support for the dask dashboard is still in beta, but you can access it by first launching the dashboard client:
+
+```python
+import nt2 
+nt2.Dashboard()
+```
+
+This will output the port where the dashboard server is running, e.g., `Dashboard: http://127.0.0.1:8787/status`. Click on it (or enter in your browser) to open the dashboard.
+
 ### Features
 
 1. Lazy loading and parallel processing of the simulation data with [`dask`](https://dask.org/).
