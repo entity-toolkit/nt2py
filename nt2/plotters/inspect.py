@@ -293,7 +293,8 @@ class _datasetInspectPlotAccessor:
                     norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
                 )
             ax.set(
-                title=rf"{fld}{'' if coeff_pow == 0 else fr' [$\cdot 10^{-coeff_pow}$]'}"
+                title=f"{fld}"
+                + ("" if coeff_pow == 0 else f" [$\\cdot 10^{-coeff_pow}$]")
             )
 
         for n, ax in enumerate(axes):
