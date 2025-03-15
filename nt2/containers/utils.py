@@ -1,3 +1,4 @@
+from typing import List, Union, Tuple, Dict
 import h5py
 import numpy as np
 import xarray as xr
@@ -23,7 +24,7 @@ def _dataIs2DPolar(ds):
 
 
 def _read_category_metadata(
-    single_file: bool, prefix: str, file: h5py.File | list[h5py.File]
+    single_file: bool, prefix: str, file: Union[h5py.File, List[h5py.File]]
 ):
     outsteps = []
     steps = []
@@ -62,7 +63,7 @@ def _read_category_metadata(
 
 
 # fields
-def _read_coordinates(coords: list[str], file: h5py.File):
+def _read_coordinates(coords: List[str], file: h5py.File):
     for st in file:
         group = file[st]
         if isinstance(group, h5py.Group):
@@ -108,12 +109,12 @@ def _read_coordinates(coords: list[str], file: h5py.File):
 def _preload_dask_arrays(
     single_file: bool,
     k: str,
-    outsteps: list[int],
-    coord_replacements: list[tuple[str, str]],
-    field_replacements: list[tuple[str, str]],
+    outsteps: List[int],
+    coord_replacements: List[Tuple[str, str]],
+    field_replacements: List[Tuple[str, str]],
     layout: str,
-    file: h5py.File | list[h5py.File],
-) -> tuple[str, list[dArray]]:
+    file: Union[h5py.File, List[h5py.File]],
+) -> Tuple[str, List[dArray]]:
     dask_arrays = []
     if single_file:
         for s in outsteps:
@@ -149,11 +150,11 @@ def _preload_dask_arrays(
 def _preload_domain_shapes(
     single_file: bool,
     k: str,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    file: h5py.File | list[h5py.File],
-) -> tuple[xr.DataArray, xr.DataArray]:
+    outsteps: List[int],
+    times: List[float],
+    steps: List[int],
+    file: Union[h5py.File, List[h5py.File]],
+) -> Tuple[xr.DataArray, xr.DataArray]:
     dask_corners = []
     dask_sizes = []
     ndomains = None
@@ -203,15 +204,15 @@ def _preload_domain_shapes(
 def _preload_field_with_ghosts(
     single_file: bool,
     k: str,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    coords: list[str],
-    coord_replacements: list[tuple[str, str]],
-    field_replacements: list[tuple[str, str]],
+    outsteps: List[int],
+    times: List[float],
+    steps: List[int],
+    coords: List[str],
+    coord_replacements: List[Tuple[str, str]],
+    field_replacements: List[Tuple[str, str]],
     layout: str,
-    file: h5py.File | list[h5py.File],
-) -> tuple[str, xr.DataArray, dict, dict, dict]:
+    file: Union[h5py.File, List[h5py.File]],
+) -> Tuple[str, xr.DataArray, Dict, Dict, Dict]:
     k_, dask_arrays = _preload_dask_arrays(
         single_file=single_file,
         k=k,
@@ -255,18 +256,18 @@ def _preload_field_with_ghosts(
 def _preload_field(
     single_file: bool,
     k: str,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    coords: list[str],
-    xc_coords: dict[str, str],
-    xe_min_coords: dict[str, str],
-    xe_max_coords: dict[str, str],
-    coord_replacements: list[tuple[str, str]],
-    field_replacements: list[tuple[str, str]],
+    outsteps: List[int],
+    times: List[float],
+    steps: List[int],
+    coords: List[str],
+    xc_coords: Dict[str, str],
+    xe_min_coords: Dict[str, str],
+    xe_max_coords: Dict[str, str],
+    coord_replacements: List[Tuple[str, str]],
+    field_replacements: List[Tuple[str, str]],
     layout: str,
-    file: h5py.File | list[h5py.File],
-) -> tuple[str, xr.DataArray]:
+    file: Union[h5py.File, List[h5py.File]],
+) -> Tuple[str, xr.DataArray]:
     k_, dask_arrays = _preload_dask_arrays(
         single_file=single_file,
         k=k,
@@ -313,13 +314,13 @@ def _read_particle_species(first_step: str, file: h5py.File):
 def _preload_particle_species(
     single_file: bool,
     s: int,
-    quantities: list[str],
+    quantities: List[str],
     coord_type: str,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    coord_replacements: dict[str, str],
-    file: h5py.File | list[h5py.File],
+    outsteps: List[int],
+    times: List[float],
+    steps: List[int],
+    coord_replacements: Dict[str, str],
+    file: Union[h5py.File, List[h5py.File]],
 ):
     prtl_data = {}
     for q in [
@@ -415,10 +416,10 @@ def _preload_spectra(
     single_file: bool,
     sp: int,
     e_bins: np.ndarray,
-    outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    file: h5py.File | list[h5py.File],
+    outsteps: List[int],
+    times: List[float],
+    steps: List[int],
+    file: Union[h5py.File, List[h5py.File]],
 ):
     dask_arrays = []
     if single_file:
