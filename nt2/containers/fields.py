@@ -6,7 +6,9 @@ from nt2.containers.container import Container
 from nt2.containers.utils import (
     _read_category_metadata,
     _read_coordinates,
+    _preload_domain_shapes,
     _preload_field,
+    _preload_field_with_ghosts,
 )
 
 from nt2.plotters.polar import (
@@ -103,9 +105,12 @@ class FieldsContainer(Container):
                     False, "f", self.fields_files
                 )
 
-        coords = list(CoordinateDict[self.configs["coordinates"]].values())[::-1][
-            -self.configs["dimension"] :
-        ]
+        if not self.isDebug():
+            coords = list(CoordinateDict[self.configs["coordinates"]].values())[::-1][
+                -self.configs["dimension"] :
+            ]
+        else:
+            coords = ["i3", "i2", "i1"][-self.configs["dimension"] :]
 
         if self.configs["single_file"]:
             assert self.master_file is not None, "Master file not found"
@@ -116,30 +121,74 @@ class FieldsContainer(Container):
         self._fields = xr.Dataset()
 
         if "fields" in self.metadata and len(self.metadata["fields"]["outsteps"]) > 0:
-            for k in self.metadata["fields"]["quantities"]:
-                name, dset = _preload_field(
-                    single_file=self.configs["single_file"],
-                    k=k,
-                    dim=self.configs["dimension"],
-                    ngh=self.configs["ngh"],
-                    outsteps=self.metadata["fields"]["outsteps"],
-                    times=self.metadata["fields"]["times"],
-                    steps=self.metadata["fields"]["steps"],
-                    coords=coords,
-                    xc_coords=self.mesh["x_c"],
-                    xe_min_coords=self.mesh["x_emin"],
-                    xe_max_coords=self.mesh["x_emax"],
-                    coord_replacements=list(
-                        CoordinateDict[self.configs["coordinates"]].items()
-                    ),
-                    field_replacements=list(QuantityDict.items()),
-                    layout=self.configs["layout"],
-                    file=(
-                        self.master_file
-                        if self.configs["single_file"] and self.master_file is not None
-                        else self.fields_files
-                    ),
+            self.domains = xr.Dataset()
+            for i in range(self.configs["dimension"]):
+                self.domains[f"x{i+1}"], self.domains[f"sx{i+1}"] = (
+                    _preload_domain_shapes(
+                        single_file=self.configs["single_file"],
+                        k=f"N{i+1}l",
+                        outsteps=self.metadata["fields"]["outsteps"],
+                        times=self.metadata["fields"]["times"],
+                        steps=self.metadata["fields"]["steps"],
+                        file=(
+                            self.master_file
+                            if self.configs["single_file"]
+                            and self.master_file is not None
+                            else self.fields_files
+                        ),
+                    )
                 )
+
+            for k in self.metadata["fields"]["quantities"]:
+                if not self.isDebug():
+                    name, dset = _preload_field(
+                        single_file=self.configs["single_file"],
+                        k=k,
+                        outsteps=self.metadata["fields"]["outsteps"],
+                        times=self.metadata["fields"]["times"],
+                        steps=self.metadata["fields"]["steps"],
+                        coords=coords,
+                        xc_coords=self.mesh["xc"],
+                        xe_min_coords=self.mesh["xe_min"],
+                        xe_max_coords=self.mesh["xe_max"],
+                        coord_replacements=list(
+                            CoordinateDict[self.configs["coordinates"]].items()
+                        ),
+                        field_replacements=list(QuantityDict.items()),
+                        layout=self.configs["layout"],
+                        file=(
+                            self.master_file
+                            if self.configs["single_file"]
+                            and self.master_file is not None
+                            else self.fields_files
+                        ),
+                    )
+                else:
+                    (
+                        name,
+                        dset,
+                        self.mesh["xc"],
+                        self.mesh["xe_min"],
+                        self.mesh["xe_max"],
+                    ) = _preload_field_with_ghosts(
+                        single_file=self.configs["single_file"],
+                        k=k,
+                        outsteps=self.metadata["fields"]["outsteps"],
+                        times=self.metadata["fields"]["times"],
+                        steps=self.metadata["fields"]["steps"],
+                        coords=coords,
+                        coord_replacements=list(
+                            CoordinateDict[self.configs["coordinates"]].items()
+                        ),
+                        field_replacements=list(QuantityDict.items()),
+                        layout=self.configs["layout"],
+                        file=(
+                            self.master_file
+                            if self.configs["single_file"]
+                            and self.master_file is not None
+                            else self.fields_files
+                        ),
+                    )
                 self.fields[name] = dset
 
     @property
@@ -190,3 +239,55 @@ class FieldsContainer(Container):
             string += "Fields: empty\n"
 
         return string
+
+    def plotDomains(self, ax, ti=None, t=None, **kwargs):
+        if self.domains is None:
+            raise AttributeError("Domains not found")
+
+        assert len(self.domains.data_vars) == 4, "Data must be 2D for plotGrid to work"
+
+        import matplotlib.patches as mpatches
+
+        ngh = self.configs["ngh"]
+
+        xlim, ylim = ax.get_xlim(), ax.get_ylim()
+        options = {
+            "lw": 2,
+            "color": "r",
+            "ls": "-",
+        }
+        options.update(kwargs)
+
+        for dom in self.domains.dom:
+            selection = self.domains.sel(dom=dom)
+            if ti is not None:
+                selection = selection.sel(t=ti)
+            elif t is not None:
+                selection = selection.sel(t=t, method="nearest")
+            else:
+                selection = selection.isel(t=0)
+
+            x1c, sx1 = selection.x1.values[()], selection.sx1.values[()]
+            x2c, sx2 = selection.x2.values[()], selection.sx2.values[()]
+
+            # add rectangle
+            ax.add_patch(
+                mpatches.Rectangle(
+                    (x1c + ngh, x2c + ngh),
+                    sx1 - 2 * ngh,
+                    sx2 - 2 * ngh,
+                    fill=None,
+                    **options,
+                )
+            )
+
+            # ax.plot(
+            #     self.domains[x1][j],
+            #     self.domains[x2][j],
+            #     **options,
+            # )
+            # ax.plot(
+            #     self.domains[x1_e][j],
+            #     self.domains[x2_e][j],
+            #     **options,
+            # )

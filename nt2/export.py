@@ -1,4 +1,4 @@
-def _makeFramesAndMovie(name, data, plot, times, **kwargs):
+def makeFramesAndMovie(name, plot, times, data=None, **kwargs):
     num_cpus = kwargs.pop("num_cpus", None)
     if all(
         makeFrames(

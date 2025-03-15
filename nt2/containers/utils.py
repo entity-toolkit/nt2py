@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 from dask.array.core import from_array
 from dask.array.core import stack
+from dask.array.core import Array as dArray
 import inspect
 
 
@@ -98,42 +99,21 @@ def _read_coordinates(coords: list[str], file: h5py.File):
                     )
                     for i, c in enumerate(coords[::-1])
                 }
-                return {"x_c": xc, "x_emin": xe_min, "x_emax": xe_max}
+                return {"xc": xc, "xe_min": xe_min, "xe_max": xe_max}
         else:
             raise ValueError(f"Unexpected type {type(file[st])}")
     raise ValueError("Could not find coordinates in file")
 
 
-def _preload_field(
+def _preload_dask_arrays(
     single_file: bool,
     k: str,
-    dim: int,
-    ngh: int,
     outsteps: list[int],
-    times: list[float],
-    steps: list[int],
-    coords: list[str],
-    xc_coords: dict[str, str],
-    xe_min_coords: dict[str, str],
-    xe_max_coords: dict[str, str],
     coord_replacements: list[tuple[str, str]],
     field_replacements: list[tuple[str, str]],
     layout: str,
     file: h5py.File | list[h5py.File],
-):
-    if dim == 1:
-        noghosts = slice(ngh, -ngh) if ngh > 0 else slice(None)
-    elif dim == 2:
-        noghosts = (slice(ngh, -ngh), slice(ngh, -ngh)) if ngh > 0 else slice(None)
-    elif dim == 3:
-        noghosts = (
-            (slice(ngh, -ngh), slice(ngh, -ngh), slice(ngh, -ngh))
-            if ngh > 0
-            else slice(None)
-        )
-    else:
-        raise ValueError("Invalid dimension")
-
+) -> tuple[str, list[dArray]]:
     dask_arrays = []
     if single_file:
         for s in outsteps:
@@ -141,7 +121,7 @@ def _preload_field(
             dset = file[f"{s}/{k}"]
             if isinstance(dset, h5py.Dataset):
                 array = from_array(np.transpose(dset) if layout == "right" else dset)
-                dask_arrays.append(array[noghosts])
+                dask_arrays.append(array)
             else:
                 raise ValueError(f"Unexpected type {type(dset)}")
     else:
@@ -150,7 +130,7 @@ def _preload_field(
             dset = f[f"Step0/{k}"]
             if isinstance(dset, h5py.Dataset):
                 array = from_array(np.transpose(dset) if layout == "right" else dset)
-                dask_arrays.append(array[noghosts])
+                dask_arrays.append(array)
             else:
                 raise ValueError(f"Unexpected type {type(dset)}")
 
@@ -162,6 +142,140 @@ def _preload_field(
             k_ = "_".join([k_.split("_")[0].replace(c[0], c[1])] + k_.split("_")[1:])
     for f in field_replacements:
         k_ = k_.replace(*f)
+
+    return k_, dask_arrays
+
+
+def _preload_domain_shapes(
+    single_file: bool,
+    k: str,
+    outsteps: list[int],
+    times: list[float],
+    steps: list[int],
+    file: h5py.File | list[h5py.File],
+) -> tuple[xr.DataArray, xr.DataArray]:
+    dask_corners = []
+    dask_sizes = []
+    ndomains = None
+    if single_file:
+        for s in outsteps:
+            assert isinstance(file, h5py.File)
+            dset = file[f"{s}/{k}"]
+            if isinstance(dset, h5py.Dataset):
+                dask_corners.append(from_array(dset[::2]))
+                dask_sizes.append(from_array(dset[1::2]))
+                ndomains = ndomains or (dset.shape[0] // 2)
+            else:
+                raise ValueError(f"Unexpected type {type(dset)}")
+    else:
+        for f in file:
+            assert isinstance(f, h5py.File)
+            dset = f[f"Step0/{k}"]
+            if isinstance(dset, h5py.Dataset):
+                dask_corners.append(from_array(dset[::2]))
+                dask_sizes.append(from_array(dset[1::2]))
+                ndomains = ndomains or (dset.shape[0] // 2)
+            else:
+                raise ValueError(f"Unexpected type {type(dset)}")
+    assert ndomains is not None, "Could not find domain shapes"
+    domains = np.arange(ndomains)
+    return xr.DataArray(
+        stack(dask_corners, axis=0),
+        dims=["t", "dom"],
+        name=k,
+        coords={
+            "t": times,
+            "s": ("t", steps),
+            "dom": domains,
+        },
+    ), xr.DataArray(
+        stack(dask_sizes, axis=0),
+        dims=["t", "dom"],
+        name=k,
+        coords={
+            "t": times,
+            "s": ("t", steps),
+            "dom": domains,
+        },
+    )
+
+
+def _preload_field_with_ghosts(
+    single_file: bool,
+    k: str,
+    outsteps: list[int],
+    times: list[float],
+    steps: list[int],
+    coords: list[str],
+    coord_replacements: list[tuple[str, str]],
+    field_replacements: list[tuple[str, str]],
+    layout: str,
+    file: h5py.File | list[h5py.File],
+) -> tuple[str, xr.DataArray, dict, dict, dict]:
+    k_, dask_arrays = _preload_dask_arrays(
+        single_file=single_file,
+        k=k,
+        outsteps=outsteps,
+        coord_replacements=coord_replacements,
+        field_replacements=field_replacements,
+        layout=layout,
+        file=file,
+    )
+
+    sizes = dask_arrays[0].shape[::-1]
+    assert len(sizes) == len(coords), "Mismatch in number of dimensions"
+    xc = {}
+    xe_min = {}
+    xe_max = {}
+    for i, ci in enumerate(coords[::-1]):
+        xc[ci] = np.arange(sizes[i]) + 0.5
+        xe_min[ci + "_1"] = (ci, np.arange(sizes[i]))
+        xe_max[ci + "_2"] = (ci, np.arange(sizes[i]) + 1)
+
+    return (
+        k_,
+        xr.DataArray(
+            stack(dask_arrays, axis=0),
+            dims=["t", *coords],
+            name=k_,
+            coords={
+                "t": times,
+                "s": ("t", steps),
+                **xc,
+                **xe_min,
+                **xe_max,
+            },
+        ),
+        xc,
+        xe_min,
+        xe_max,
+    )
+
+
+def _preload_field(
+    single_file: bool,
+    k: str,
+    outsteps: list[int],
+    times: list[float],
+    steps: list[int],
+    coords: list[str],
+    xc_coords: dict[str, str],
+    xe_min_coords: dict[str, str],
+    xe_max_coords: dict[str, str],
+    coord_replacements: list[tuple[str, str]],
+    field_replacements: list[tuple[str, str]],
+    layout: str,
+    file: h5py.File | list[h5py.File],
+) -> tuple[str, xr.DataArray]:
+    k_, dask_arrays = _preload_dask_arrays(
+        single_file=single_file,
+        k=k,
+        outsteps=outsteps,
+        coord_replacements=coord_replacements,
+        field_replacements=field_replacements,
+        layout=layout,
+        file=file,
+    )
 
     return k_, xr.DataArray(
         stack(dask_arrays, axis=0),

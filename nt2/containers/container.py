@@ -28,9 +28,6 @@ class Container:
 
     Kwargs
     ------
-    single_file : bool, optional
-        Whether the data is stored in a single file. Default is False.
-
     pickle : bool, optional
         Whether to use pickle for reading the data. Default is True.
 
@@ -67,17 +64,15 @@ class Container:
 
     """
 
-    def __init__(
-        self, path, single_file=False, pickle=True, greek=False, dask_props={}
-    ):
+    def __init__(self, path, pickle=True, greek=False, dask_props={}):
         super(Container, self).__init__()
 
+        self.path = path
         self.configs: dict[str, Any] = {
-            "single_file": single_file,
+            "single_file": self.path.endswith(".h5"),
             "use_pickle": pickle,
             "use_greek": greek,
         }
-        self.path = path
         self.metadata = {}
         self.mesh = None
         if self.configs["single_file"]:
@@ -95,6 +90,8 @@ class Container:
 
         self.attrs = _read_attribs_SingleFile(self.master_file)
 
+        assert self.master_file is not None, "Master file not found"
+
         self.configs["ngh"] = int(self.master_file.attrs.get("NGhosts", 0))
         self.configs["layout"] = (
             "right" if self.master_file.attrs.get("LayoutRight", 1) == 1 else "left"
@@ -106,16 +103,31 @@ class Container:
         if self.configs["coordinates"] == "qsph":
             self.configs["coordinates"] = "sph"
 
+        if self.isDebug():
+            self.configs["coordinates"] = "cart"
+
         if not self.configs["single_file"]:
             self.master_file.close()
             self.master_file = None
+
+    def isDebug(self):
+        return self.configs["ngh"] > 0
 
     def __del__(self):
         if self.master_file is not None:
             self.master_file.close()
 
     def plotGrid(self, ax, **kwargs):
-        from matplotlib import patches
+        try:
+            assert self.mesh is not None, "Mesh not found"
+        except AttributeError:
+            raise AttributeError("Mesh not found")
+        except AssertionError:
+            raise AssertionError("Mesh not found")
+
+        assert len(self.mesh["xc"]) == 2, "Data must be 2D for plotGrid to work"
+
+        from matplotlib import patches as mpatches
 
         xlim, ylim = ax.get_xlim(), ax.get_ylim()
         options = {
@@ -125,15 +137,23 @@ class Container:
         }
         options.update(kwargs)
 
+        x1_emin, x2_emin = list(self.mesh["xe_min"].keys())
+        x1_emax, x2_emax = list(self.mesh["xe_max"].keys())
+        x1_e = list(self.mesh["xe_min"][x1_emin][1]) + [
+            self.mesh["xe_max"][x1_emax][1][-1]
+        ]
+        x2_e = list(self.mesh["xe_min"][x2_emin][1]) + [
+            self.mesh["xe_max"][x2_emax][1][-1]
+        ]
         if self.configs["coordinates"] == "cart":
-            for x in self.attrs["X1"]:
-                ax.plot([x, x], [self.attrs["X2Min"], self.attrs["X2Max"]], **options)
-            for y in self.attrs["X2"]:
-                ax.plot([self.attrs["X1Min"], self.attrs["X1Max"]], [y, y], **options)
+            for x1 in x1_e:
+                ax.plot([x1, x1], [x2_e[0], x2_e[-1]], **options)
+            for x2 in x2_e:
+                ax.plot([x1_e[0], x1_e[-1]], [x2, x2], **options)
         else:
-            for r in self.attrs["X1"]:
+            for r in x1_e:
                 ax.add_patch(
-                    patches.Arc(
+                    mpatches.Arc(
                         (0, 0),
                         2 * r,
                         2 * r,
@@ -143,15 +163,15 @@ class Container:
                         **options,
                     )
                 )
-            for th in self.attrs["X2"]:
+            for th in x2_e:
                 ax.plot(
                     [
-                        self.attrs["X1Min"] * np.sin(th),
-                        self.attrs["X1Max"] * np.sin(th),
+                        x1_e[0] * np.sin(th),
+                        x1_e[-1] * np.sin(th),
                     ],
                     [
-                        self.attrs["X1Min"] * np.cos(th),
-                        self.attrs["X1Max"] * np.cos(th),
+                        x1_e[0] * np.cos(th),
+                        x1_e[-1] * np.cos(th),
                     ],
                     **options,
                 )
