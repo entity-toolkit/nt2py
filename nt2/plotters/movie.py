@@ -1,4 +1,4 @@
-from nt2.export import _makeFramesAndMovie
+from nt2.export import makeFramesAndMovie
 
 
 class _moviePlotAccessor:
@@ -23,7 +23,7 @@ class _moviePlotAccessor:
             plt.tight_layout()
 
         num_cpus = movie_kwargs.pop("num_cpus", None)
-        return _makeFramesAndMovie(
+        return makeFramesAndMovie(
             name=name,
             data=self._obj,
             plot=plot_func,

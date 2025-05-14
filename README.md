@@ -27,6 +27,8 @@ data.particles  # < dict[int : xr.Dataset]
 data.spectra    # < xr.Dataset
 ```
 
+> If using Jupyter notebook, you can quickly preview the loaded metadata by simply running a cell with just `data` in it (or in regular python, by doing `print(data)`).
+
 #### Examples
 
 Plot a field (in cartesian space) at a specific time (or output step):
@@ -96,7 +98,42 @@ def plot(t, data):
 data.makeMovie(plot)
 ```
 
-> If using Jupyter notebook, you can quickly preview the loaded metadata by simply running a cell with just `data` in it (or in regular python, by doing `print(data)`).
+You may also access the movie-making functionality directly in case you want to use it for other things:
+
+```python
+import nt2.export as nt2e
+
+def plot(t):
+  ...
+
+#             this will be the array of `t`-s passed to `plot`
+#                           |
+#                           V
+nt2e.makeFrames(plot, np.arange(100), "myAnim")
+nt2e.makeMovie(
+    input="myAnim/", output="myAnim.mp4", number=5, overwrite=True
+)
+
+# or combined together
+nt2e.makeFramesAndMovie(
+    name="myAnim", plot=plot, times=np.arange(100)
+)
+```
+
+#### Plots for debugging
+
+If the simulation also outputs the ghost cells, `nt2py` will interpret the fields differently, and instead of reading the physical coordinates, will build the coordinates based on the number of cells (including ghost cells). In particular, instead of, e.g., `data.fields.x` it will contain `data.fields.i1`. The data will also contain information about the meshblock decomposition. For instance, if you have `Nx` meshblocks in the `x` direction, each having `nx` cells, the coordinates `data.fields.i1` will go from `0` to `nx * NX + 2 * NGHOSTS * Nx`.
+
+You can overplot both the coordinate grid as well as the active zones of the meshblocks using the following:
+
+```python
+ax = plt.gca()
+data.fields.Ex.isel(t=ti).plot(ax=ax)
+data.plotGrid(ax=ax)
+data.plotDomains(ax=ax)
+```
+
+> Keep in mind, that by default `Entity` converts all quantities to tetrad basis (or contravariant in GR) and interpolates to cell centers before outputting (except for the ghost cells). So when doing plots for debugging, make sure to also set `as_is = true` (together with `ghosts = true`) in the `[output.debug]` section of the `toml` input file. This will ensure the fields are being output as is, with no conversion or interpolation. This does not apply to particle moments, which are never stored in the code and are computed only during the output.
 
 ### Dashboard
 
@@ -119,4 +156,7 @@ This will output the port where the dashboard server is running, e.g., `Dashboar
 
 - [ ] Unit tests
 - [ ] Plugins for other simulation data formats
+- [ ] Support for multiple runs
+- [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)
+- [x] Ghost cells support
 - [x] Usage examples

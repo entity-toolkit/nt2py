@@ -3,7 +3,10 @@ from nt2.containers.particles import ParticleContainer
 from nt2.containers.spectra import SpectraContainer
 
 from nt2.containers.utils import InheritClassDocstring
-from nt2.export import _makeFramesAndMovie
+from nt2.export import makeFramesAndMovie
+from nt2.utils import FutureDeprecationWarning
+
+import warnings
 
 
 @InheritClassDocstring
@@ -20,9 +23,6 @@ class Data(FieldsContainer, ParticleContainer, SpectraContainer):
         """
         Kwargs
         ------
-        single_file : bool, optional
-            Whether the data is stored in a single file. Default is False.
-
         pickle : bool, optional
             Whether to use pickle for reading the data. Default is True.
 
@@ -33,6 +33,17 @@ class Data(FieldsContainer, ParticleContainer, SpectraContainer):
             Additional properties for Dask [NOT IMPLEMENTED]. Default is {}.
 
         """
+        if "single_file" in kwargs:
+            kwargs.pop("single_file")
+            DeprecationWarning()
+            warnings.warn(
+                """
+-= Deprecation Warning =-
+The argument `single_file` is no longer needed to be specified, 
+as the code derives this from the extension passed in the `path`. 
+The argument is ignored now, but will throw an error in future releases.""",
+                FutureDeprecationWarning,
+            )
         super(Data, self).__init__(**kwargs)
         if "path" not in kwargs:
             raise ValueError('Usage example: data = nt2.Data(path="...", ...)')
@@ -71,9 +82,8 @@ class Data(FieldsContainer, ParticleContainer, SpectraContainer):
 
         times : array_like, optional
             Either time indices or timestamps to use for generating the movie. Default is None.
-            If None, will use timestamps from the fields,
+            If None, will use timestamps (not steps) from the fields,
             which might not coincide with values from other quantities.
-
 
         **kwargs :
             Additional keyword arguments passed to `ffmpeg`.
@@ -82,7 +92,7 @@ class Data(FieldsContainer, ParticleContainer, SpectraContainer):
 
         if times is None:
             times = self.fields.t.values
-        return _makeFramesAndMovie(
+        return makeFramesAndMovie(
             name=self.attrs["simulation.name"],
             data=self,
             plot=plot,

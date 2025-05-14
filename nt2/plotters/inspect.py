@@ -1,5 +1,5 @@
 from nt2.containers.utils import _dataIs2DPolar
-from nt2.export import _makeFramesAndMovie
+from nt2.export import makeFramesAndMovie
 
 
 class _datasetInspectPlotAccessor:
@@ -67,7 +67,7 @@ class _datasetInspectPlotAccessor:
                     plot_kwargs,
                 )
 
-            return _makeFramesAndMovie(
+            return makeFramesAndMovie(
                 name=name,
                 data=self._obj,
                 plot=plot_func,
@@ -189,12 +189,13 @@ class _datasetInspectPlotAccessor:
                 data[fld].max().values[()],
             )
             if fld[0] in "EBJNT":
-                if minmax[fld[0]] is None:
+                mm = minmax[fld[0]]
+                if mm is None:
                     minmax[fld[0]] = (vmin, vmax)
                 else:
                     minmax[fld[0]] = (
-                        min(minmax[fld[0]][0], vmin),
-                        max(minmax[fld[0]][1], vmax),
+                        min(mm[0], vmin),
+                        max(mm[1], vmax),
                     )
         for f, vv in minmax.items():
             if vv is not None:
@@ -218,8 +219,9 @@ class _datasetInspectPlotAccessor:
             elif fld.startswith("J"):
                 cmap = "coolwarm"
             if fld[0] in "EBJNT":
-                if minmax[fld[0]] is not None:
-                    vmin, vmax = minmax[fld[0]]
+                mm = minmax[fld[0]]
+                if mm is not None:
+                    vmin, vmax = mm
                 else:
                     raise ValueError(f"Field {fld} not found in minmax.")
             else:
