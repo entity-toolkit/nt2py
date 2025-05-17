@@ -151,6 +151,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+nt2/tests/testdata
 test/
 temp/
 *.bak
