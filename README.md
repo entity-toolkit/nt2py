@@ -8,15 +8,14 @@ pip install nt2py
 
 ### Usage
 
-The Library works both with single-file output as well as with separate files. In either case, the location of the data is passed via `path` keyword argument.
+Simply pass the location to the data when initializing the main `Data` object:
 
 ```python
 import nt2
 
-data = nt2.Data(path="path/to/data")
+data = nt2.Data("path/to/data")
 # example: 
-#   data = nt2.Data(path="path/to/shock.h5") : for single-file
-#   data = nt2.Data(path="path/to/shock") : for multi-file
+#   data = nt2.Data("path/to/shock")
 ```
 
 The data is stored in specialized containers which can be accessed via corresponding attributes:
@@ -154,8 +153,8 @@ This will output the port where the dashboard server is running, e.g., `Dashboar
 
 ### TODO
 
-- [ ] Unit tests
-- [ ] Plugins for other simulation data formats
+- [x] Unit tests
+- [x] Plugins for other simulation data formats
 - [ ] Support for multiple runs
 - [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)
 - [x] Ghost cells support
