@@ -8,15 +8,6 @@ from dask.array.core import Array as dArray
 import inspect
 
 
-def InheritClassDocstring(cls):
-    if cls.__doc__ is None:
-        cls.__doc__ = ""
-    for base in inspect.getmro(cls):
-        if base.__doc__ is not None:
-            cls.__doc__ += base.__doc__
-    return cls
-
-
 def _dataIs2DPolar(ds):
     return ("r" in ds.dims and ("θ" in ds.dims or "th" in ds.dims)) and len(
         ds.dims

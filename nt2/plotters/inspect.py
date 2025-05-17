@@ -1,5 +1,5 @@
-from nt2.containers.utils import _dataIs2DPolar
-from nt2.export import makeFramesAndMovie
+from nt2.utils import DataIs2DPolar
+from nt2.plotters.export import makeFramesAndMovie
 
 
 class _datasetInspectPlotAccessor:
@@ -116,7 +116,7 @@ class _datasetInspectPlotAccessor:
         nfields = len(fields_to_plot)
 
         aspect = 1
-        if _dataIs2DPolar(data):
+        if DataIs2DPolar(data):
             aspect = 0.5
         else:
             aspect = len(data[x1]) / len(data[x2])
@@ -249,7 +249,7 @@ class _datasetInspectPlotAccessor:
                 kwargs[fld].pop("vmin")
                 kwargs[fld].pop("vmax")
 
-        if _dataIs2DPolar(data):
+        if DataIs2DPolar(data):
             raise NotImplementedError("Polar plots for inspect not implemented yet.")
         else:
             for fld, ax in zip(fields_to_plot, axes):

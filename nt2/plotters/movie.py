@@ -1,4 +1,4 @@
-from nt2.export import makeFramesAndMovie
+from nt2.plotters.export import makeFramesAndMovie
 
 
 class _moviePlotAccessor:

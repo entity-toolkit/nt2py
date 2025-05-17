@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Any
 
-from nt2.containers.utils import _dataIs2DPolar
+from nt2.utils import DataIs2DPolar
 
 
 def DipoleSampling(**kwargs):
@@ -59,7 +59,7 @@ class _datasetPolarPlotAccessor:
 
     def pcolor(self, value, **kwargs):
         assert "t" not in self._obj[value].dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         self._obj[value].polar.pcolor(**kwargs)
 
     def fieldplot(
@@ -166,7 +166,7 @@ class _datasetPolarPlotAccessor:
 
         assert "t" not in self._obj[fr].dims, "Time must be specified"
         assert "t" not in self._obj[fth].dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
 
         useGreek = "θ" in self._obj.coords.keys()
 
@@ -321,7 +321,7 @@ class _polarPlotAccessor:
 
         assert ax.name != "polar", "`ax` must be a rectilinear projection"
         assert "t" not in self._obj.dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
         if type(kwargs.get("norm", None)) is colors.LogNorm:
             cm = kwargs.get("cmap", "viridis")
@@ -456,7 +456,7 @@ class _polarPlotAccessor:
 
         assert ax.name != "polar", "`ax` must be a rectilinear projection"
         assert "t" not in self._obj.dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
         r, th = np.meshgrid(
             self._obj.coords["r"], self._obj.coords["θ" if useGreek else "th"]

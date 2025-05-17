@@ -7,7 +7,7 @@ name = "nt2py"
 dynamic = ["version"]
 dependencies = [
   "types-setuptools",
-  "dask[distributed]",
+  "dask[complete]",
   "bokeh",
   "xarray",
   "numpy",
