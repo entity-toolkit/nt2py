@@ -149,12 +149,17 @@ This will output the port where the dashboard server is running, e.g., `Dashboar
 
 1. Lazy loading and parallel processing of the simulation data with [`dask`](https://dask.org/).
 2. Context-aware data manipulation with [`xarray`](http://xarray.pydata.org/en/stable/).
-3. Parellel plotting and movie generation with [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html) and [`ffmpeg`](https://ffmpeg.org/).
+3. Parallel plotting and movie generation with [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html) and [`ffmpeg`](https://ffmpeg.org/).
+
+### Testing
+
+There are unit tests included with the code which also require downloading test data with [`git lfs`](https://git-lfs.com/) (installed separately from `git`). You may download the data simply by running `git lfs pull`.
 
 ### TODO
 
 - [x] Unit tests
 - [x] Plugins for other simulation data formats
+- [ ] Command-line interface
 - [ ] Support for multiple runs
 - [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)
 - [x] Ghost cells support

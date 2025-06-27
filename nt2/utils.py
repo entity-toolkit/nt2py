@@ -12,7 +12,7 @@ class FutureDeprecationWarning(Warning):
 
 class Format(Enum):
     HDF5 = "h5"
-    BP5 = "bp5"
+    BP5 = "bp"
 
 
 class Layout(Enum):

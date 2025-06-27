@@ -10,6 +10,7 @@ from nt2.utils import (
 )
 from nt2.readers.base import BaseReader
 from nt2.readers.hdf5 import Reader as HDF5Reader
+from nt2.readers.adios2 import Reader as BP5Reader
 from nt2.containers.fields import Fields
 
 from nt2.plotters.polar import (
@@ -85,9 +86,11 @@ class Data(Fields):
         if reader is None:
             if DetermineDataFormat(path) == Format.HDF5:
                 self.__reader = HDF5Reader()
+            elif DetermineDataFormat(path) == Format.BP5:
+                self.__reader = BP5Reader()
             else:
                 raise NotImplementedError(
-                    "Only HDF5 format is supported at the moment."
+                    "Only HDF5 & BP5 formats are supported at the moment."
                 )
         else:
             if DetermineDataFormat(path) != reader.format:
@@ -109,7 +112,10 @@ class Data(Fields):
                         f"Coordinates not found in attributes for category {category}."
                     )
                 else:
-                    if attrs["Coordinates"] == b"cart":
+                    if (
+                        attrs["Coordinates"] == b"cart"
+                        or attrs["Coordinates"] == "cart"
+                    ):
 
                         def remap_fields(name: str) -> str:
                             name = name[1:]
@@ -130,7 +136,9 @@ class Data(Fields):
 
                         coord_system = CoordinateSystem.XYZ
 
-                    elif attrs["Coordinates"] == b"sph":
+                    elif (
+                        attrs["Coordinates"] == b"sph" or attrs["Coordinates"] == "sph"
+                    ):
 
                         def remap_fields(name: str) -> str:
                             name = name[1:]
@@ -153,7 +161,7 @@ class Data(Fields):
 
                     else:
                         raise NotImplementedError(
-                            f"Coordinate system {attrs['Coordinates']} not suppoert."
+                            f"Coordinate system {attrs['Coordinates']} not supported."
                         )
                     if remap is None:
                         remap = {

@@ -1,5 +1,6 @@
 import numpy as np
 import nt2.readers.hdf5 as hdf5
+import nt2.readers.adios2 as adios2
 
 cwd = __file__.rsplit("/", 1)[0]
 
@@ -63,5 +64,13 @@ TESTS = [
         "invalid_tstep": None,
         "fields": False,
         "particles": True,
+    },
+    {
+        "dim": "2D",
+        "reader": adios2.Reader,
+        "path": f"{cwd}/testdata/adios2_2d_cart_cpu/",
+        "invalid_tstep": None,
+        "fields": True,
+        "particles": False,
     },
 ]
