@@ -8,6 +8,7 @@ dynamic = ["version"]
 dependencies = [
   "types-setuptools",
   "dask[complete]",
+  "adios2",
   "bokeh",
   "xarray",
   "numpy",
