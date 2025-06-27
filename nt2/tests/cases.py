@@ -71,6 +71,14 @@ TESTS = [
         "path": f"{cwd}/testdata/adios2_2d_cart_cpu/",
         "invalid_tstep": None,
         "fields": True,
-        "particles": False,
+        "particles": True,
+    },
+    {
+        "dim": "3D",
+        "reader": adios2.Reader,
+        "path": f"{cwd}/testdata/adios2_3d_cart_cpu/",
+        "invalid_tstep": None,
+        "fields": True,
+        "particles": True,
     },
 ]
