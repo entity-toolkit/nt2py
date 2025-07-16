@@ -2,8 +2,9 @@ import pytest
 
 from nt2.readers.base import BaseReader
 from nt2.containers.fields import Fields
+from nt2.containers.particles import Particles
 from nt2.containers.data import Data
-from nt2.tests.cases import TESTS, PARAMS
+from nt2.tests.cases import TESTS
 
 
 def check_shape(shape1, shape2):
@@ -19,6 +20,8 @@ def check_shape(shape1, shape2):
 def test_fields(test, field_container: type[Data] | type[Fields]):
     reader: BaseReader = test["reader"]()
     PATH = test["path"]
+    if test["fields"] == {}:
+        return
     fields = field_container(
         path=PATH,
         reader=reader,
@@ -33,12 +36,10 @@ def test_fields(test, field_container: type[Data] | type[Fields]):
             }.get(Fold, Fold),
         },
     )
-    if fields.fields is None:
-        return
 
     steps = reader.GetValidSteps(path=PATH, category="fields")
-    nx1 = PARAMS[test["dim"]]["nx1"]
-    nx2 = PARAMS[test["dim"]]["nx2"]
+    nx1 = test["fields"]["nx1"]
+    nx2 = test["fields"]["nx2"]
     assert fields.fields is not None, "Fields are None"
     for f in ["Ex", "Ey", "Ez", "Bx", "By", "Bz"]:
         assert f in fields.fields, f"{f} is not in fields"
@@ -48,7 +49,7 @@ def test_fields(test, field_container: type[Data] | type[Fields]):
             xzshape = (nx1,)
             xyshape = ()
         else:
-            nx3 = PARAMS[test["dim"]]["nx3"]
+            nx3 = test["fields"]["nx3"]
             xyzshape = (nx3, nx2, nx1)
             yzshape = (nx3, nx2)
             xzshape = (nx3, nx1)
@@ -78,15 +79,43 @@ def test_fields(test, field_container: type[Data] | type[Fields]):
             )
 
 
-@pytest.mark.parametrize("test", TESTS)
-def test_data(test):
+@pytest.mark.parametrize(
+    "test,particle_container",
+    [[test, fc] for test in TESTS for fc in [Data, Particles]],
+)
+def test_particles(test, particle_container: type[Data] | type[Particles]):
     reader: BaseReader = test["reader"]()
     PATH = test["path"]
-    fields = Data(
+    if test["particles"] == {}:
+        return
+    particles = particle_container(
         path=PATH,
         reader=reader,
+        remap={
+            "particles": lambda Xold: {
+                "pX1": "x",
+                "pX2": "y",
+                "pX3": "z",
+                "pU1": "ux",
+                "pU2": "uy",
+                "pU3": "uz",
+                "pW": "w",
+            }.get(Xold, Xold),
+        },
     )
-    if fields.fields is None:
-        return
-
-    print(fields.to_str())
+    steps = reader.GetValidSteps(path=PATH, category="particles")
+    assert particles.particles is not None, "Particles are None"
+    for p in ["x", "y", "z", "ux", "uy", "uz", "w"]:
+        if p == "z" and test["dim"] == "2D":
+            continue
+        for i, (_, parts) in enumerate(particles.particles.items()):
+            if isinstance(test["particles"]["num"], list):
+                num = test["particles"]["num"][i]
+            else:
+                num = test["particles"]["num"]
+            check_shape(parts[p].shape, (len(steps), num))
+            for i, st in enumerate(steps):
+                assert (
+                    parts[p].isel(t=i).s.values[()] == st
+                ), f"Step {st} does not match in particle {p}"
+                check_shape(parts[p].isel(t=i).shape, (num,))

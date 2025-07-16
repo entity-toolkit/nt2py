@@ -11,6 +11,10 @@ class BaseReader:
 
     """
 
+    def __init__(self):
+        """Initializer for the BaseReader class."""
+        self.skipped_files = []
+
     # # # # # # # # # # # # # # # # # # # # # # # #
     # Virtual methods (to be implemented in subclasses)
     # # # # # # # # # # # # # # # # # # # # # # # #
@@ -147,6 +151,27 @@ class BaseReader:
 
         """
         raise NotImplementedError("ReadCategoryNamesAtTimestep is not implemented")
+
+    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> set[int]:
+        """Read the particle species indices at a given timestep.
+
+        Parameters
+        ----------
+        path : str
+            The path to the files.
+        step : int
+            The timestep to be read.
+
+        Returns
+        -------
+        set[int]
+            A set of particle species indices at a given timestep.
+
+        """
+        return set(
+            int(f.split("_")[1])
+            for f in self.ReadCategoryNamesAtTimestep(path, "particles", "p", step)
+        )
 
     def ReadArrayShapeAtTimestep(
         self,
@@ -307,7 +332,9 @@ class BaseReader:
                     step = int(filename.split(".")[1])
                     steps.append(step)
             except OSError:
-                logging.warning(f"Could not read {filename}, skipping it")
+                if filename not in self.skipped_files:
+                    self.skipped_files.append(filename)
+                    logging.warning(f"Could not read {filename}, skipping it")
             except Exception as e:
                 raise e
         steps.sort()
@@ -343,7 +370,9 @@ class BaseReader:
                 with self.EnterFile(os.path.join(path, category, filename)):
                     files.append(filename)
             except OSError:
-                logging.warning(f"Could not read {filename}, skipping it")
+                if filename not in self.skipped_files:
+                    self.skipped_files.append(filename)
+                    logging.warning(f"Could not read {filename}, skipping it")
             except Exception as e:
                 raise e
         files.sort(key=lambda x: int(x.split(".")[1]))
@@ -474,6 +503,53 @@ class BaseReader:
                     raise ValueError(
                         f"Different field layouts found in the {self.format.value} files for step {step}"
                     )
+
+    def VerifySameParticleShapes(self, path: str):
+        """Verify that all particle quantities in a given path have the same shape at specific timesteps.
+
+        Parameters
+        ----------
+        path : str
+            The path to the files.
+
+        Raises
+        ------
+        ValueError
+            If different shapes are found.
+
+        """
+        for step in self.GetValidSteps(
+            path=path,
+            category="particles",
+        ):
+            prtl_species = self.ReadParticleSpeciesAtTimestep(path=path, step=step)
+            quantities = self.ReadCategoryNamesAtTimestep(
+                path=path,
+                category="particles",
+                prefix="p",
+                step=step,
+            )
+            quantities = set(q.split("_")[0] for q in quantities if q.startswith("p"))
+            for sp in prtl_species:
+                shape = None
+                for q in quantities:
+                    if shape is None:
+                        shape = self.ReadArrayShapeAtTimestep(
+                            path=path,
+                            category="particles",
+                            quantity=f"{q}_{sp}",
+                            step=step,
+                        )
+                    else:
+                        if shape != self.ReadArrayShapeAtTimestep(
+                            path=path,
+                            category="particles",
+                            quantity=f"{q}_{sp}",
+                            step=step,
+                        ):
+                            raise ValueError(
+                                f"Different particle shapes found in the {self.format.value} files for species {sp} and quantity {q} in step {step}"
+                            )
 
     def DefinesCategory(self, path: str, category: str) -> bool:
         """Check whether a given category is defined in the path.

@@ -1,4 +1,5 @@
 from typing import Callable
+from nt2.utils import ToHumanReadable
 
 import xarray as xr
 
@@ -12,6 +13,7 @@ from nt2.readers.base import BaseReader
 from nt2.readers.hdf5 import Reader as HDF5Reader
 from nt2.readers.adios2 import Reader as BP5Reader
 from nt2.containers.fields import Fields
+from nt2.containers.particles import Particles
 
 from nt2.plotters.polar import (
     _datasetPolarPlotAccessor,
@@ -46,7 +48,7 @@ class MoviePlotAccessor(_moviePlotAccessor):
     pass
 
 
-class Data(Fields):
+class Data(Fields, Particles):
     """Main class to manage all the data containers.
 
     Inherits from all category-specific containers.
@@ -83,19 +85,20 @@ class Data(Fields):
             If the reader format does not match the data format or if coordinate system cannot be inferred.
         """
         # determine the reader from the format
+        fmt = DetermineDataFormat(path)
         if reader is None:
-            if DetermineDataFormat(path) == Format.HDF5:
+            if fmt == Format.HDF5:
                 self.__reader = HDF5Reader()
-            elif DetermineDataFormat(path) == Format.BP5:
+            elif fmt == Format.BP5:
                 self.__reader = BP5Reader()
             else:
                 raise NotImplementedError(
                     "Only HDF5 & BP5 formats are supported at the moment."
                 )
         else:
-            if DetermineDataFormat(path) != reader.format:
+            if fmt != reader.format:
                 raise ValueError(
-                    f"Reader format {reader.format} does not match data format {DetermineDataFormat(path)}."
+                    f"Reader format {reader.format} does not match data format {fmt}."
                 )
             self.__reader = reader
 
@@ -112,10 +115,7 @@ class Data(Fields):
                         f"Coordinates not found in attributes for category {category}."
                     )
                 else:
-                    if (
-                        attrs["Coordinates"] == b"cart"
-                        or attrs["Coordinates"] == "cart"
-                    ):
+                    if attrs["Coordinates"] in [b"cart", "cart"]:
 
                         def remap_fields(name: str) -> str:
                             name = name[1:]
@@ -134,11 +134,21 @@ class Data(Fields):
                                 "X3": "z",
                             }.get(name, name)
 
+                        def remap_prtl_quantities(name: str) -> str:
+                            shortname = name[1:]
+                            return {
+                                "X1": "x",
+                                "X2": "y",
+                                "X3": "z",
+                                "U1": "ux",
+                                "U2": "uy",
+                                "U3": "uz",
+                                "W": "w",
+                            }.get(shortname, shortname)
+
                         coord_system = CoordinateSystem.XYZ
 
-                    elif (
-                        attrs["Coordinates"] == b"sph" or attrs["Coordinates"] == "sph"
-                    ):
+                    elif attrs["Coordinates"] in [b"sph", "sph"]:
 
                         def remap_fields(name: str) -> str:
                             name = name[1:]
@@ -157,6 +167,18 @@ class Data(Fields):
                                 "X3": "ph",
                             }.get(name, name)
 
+                        def remap_prtl_quantities(name: str) -> str:
+                            shortname = name[1:]
+                            return {
+                                "X1": "r",
+                                "X2": "th",
+                                "X3": "ph",
+                                "U1": "ur",
+                                "U2": "uth",
+                                "U3": "uph",
+                                "W": "w",
+                            }.get(shortname, shortname)
+
                         coord_system = CoordinateSystem.SPH
 
                     else:
@@ -167,6 +189,7 @@ class Data(Fields):
                         remap = {
                             "coords": remap_coords,
                             "fields": remap_fields,
+                            "particles": remap_prtl_quantities,
                         }
                     break
 
@@ -181,3 +204,47 @@ class Data(Fields):
     def coordinate_system(self) -> CoordinateSystem:
         """CoordinateSystem: The coordinate system of the data."""
         return self.__coordinate_system
+
+    def to_str(self) -> str:
+        """
+        Returns
+        -------
+        str
+            String representation of the all the enclosed dataframes.
+
+        """
+
+        def compactify(lst):
+            c = ""
+            cntr = 0
+            for l_ in lst:
+                if cntr > 5:
+                    c += "\n                "
+                    cntr = 0
+                c += f"{l_}, "
+                cntr += 1
+            return c[:-2]
+
+        string = ""
+        if self.fields_defined:
+            field_keys = list(self.fields.data_vars.keys())
+            string += "Fields:\n"
+            string += f"  - data axes: {compactify(self.fields.indexes.keys())}\n"
+            string += f"  - timesteps: {self.fields[field_keys[0]].shape[0]}\n"
+            string += f"  - shape: {self.fields[field_keys[0]].shape[1:]}\n"
+            string += f"  - quantities: {compactify(self.fields.data_vars.keys())}\n"
+            string += f"  - total size: {ToHumanReadable(self.fields.nbytes)}\n\n"
+        else:
+            string += "Fields: empty\n\n"
+        if self.particles_defined:
+            species = sorted(list(self.particles.keys()))
+            string += "Particle species:\n"
+            string += f"  - species: {compactify(species)}\n"
+            string += f"  - timesteps: {len(self.particles[species[0]].t)}\n"
+            string += f"  - quantities: {compactify(self.particles[species[0]].data_vars.keys())}\n"
+            string += f"  - max # per species: {[self.particles[sp].idx.shape[0] for sp in species]}\n"
+            string += f"  - total size: {ToHumanReadable(sum([self.particles[sp].nbytes for sp in species]))}\n\n"
+        else:
+            string += "Particles: empty\n\n"
+
+        return string

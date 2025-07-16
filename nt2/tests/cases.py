@@ -4,33 +4,33 @@ import nt2.readers.adios2 as adios2
 
 cwd = __file__.rsplit("/", 1)[0]
 
-PARAMS: dict[str, dict[str, float | int]] = {
-    "2D": {
-        "sx1": 10,
-        "sx2": 20,
-        "nx1": 64,
-        "nx2": 128,
-    },
-    "3D": {
-        "sx1": 10,
-        "sx2": 16,
-        "sx3": 12.5,
-        "nx1": 20,
-        "nx2": 32,
-        "nx3": 25,
-    },
-}
+# PARAMS: dict[str, dict[str, float | int]] = {
+#     "2D": {
+#         "sx1": 10,
+#         "sx2": 20,
+#         "nx1": 64,
+#         "nx2": 128,
+#     },
+#     "3D": {
+#         "sx1": 10,
+#         "sx2": 16,
+#         "sx3": 12.5,
+#         "nx1": 20,
+#         "nx2": 32,
+#         "nx3": 25,
+#     },
+# }
 
-PARAMS["2D"]["dx"] = PARAMS["2D"]["sx1"] / PARAMS["2D"]["nx1"]
-PARAMS["2D"]["x1min"] = -PARAMS["2D"]["sx1"] / 2 + PARAMS["2D"]["dx"] / 2
-PARAMS["2D"]["x2min"] = -PARAMS["2D"]["sx2"] / 2 + PARAMS["2D"]["dx"] / 2
-PARAMS["2D"]["dt"] = PARAMS["2D"]["dx"] / np.sqrt(2) / 2
+# PARAMS["2D"]["dx"] = PARAMS["2D"]["sx1"] / PARAMS["2D"]["nx1"]
+# PARAMS["2D"]["x1min"] = -PARAMS["2D"]["sx1"] / 2 + PARAMS["2D"]["dx"] / 2
+# PARAMS["2D"]["x2min"] = -PARAMS["2D"]["sx2"] / 2 + PARAMS["2D"]["dx"] / 2
+# PARAMS["2D"]["dt"] = PARAMS["2D"]["dx"] / np.sqrt(2) / 2
 
-PARAMS["3D"]["dx"] = PARAMS["3D"]["sx1"] / PARAMS["3D"]["nx1"]
-PARAMS["3D"]["x1min"] = -PARAMS["3D"]["sx1"] / 2 + PARAMS["3D"]["dx"] / 2
-PARAMS["3D"]["x2min"] = -PARAMS["3D"]["sx2"] / 2 + PARAMS["3D"]["dx"] / 2
-PARAMS["3D"]["x3min"] = PARAMS["3D"]["dx"] / 2
-PARAMS["3D"]["dt"] = PARAMS["3D"]["dx"] / np.sqrt(3) / 2
+# PARAMS["3D"]["dx"] = PARAMS["3D"]["sx1"] / PARAMS["3D"]["nx1"]
+# PARAMS["3D"]["x1min"] = -PARAMS["3D"]["sx1"] / 2 + PARAMS["3D"]["dx"] / 2
+# PARAMS["3D"]["x2min"] = -PARAMS["3D"]["sx2"] / 2 + PARAMS["3D"]["dx"] / 2
+# PARAMS["3D"]["x3min"] = PARAMS["3D"]["dx"] / 2
+# PARAMS["3D"]["dt"] = PARAMS["3D"]["dx"] / np.sqrt(3) / 2
 
 TESTS = [
     {
@@ -38,47 +38,92 @@ TESTS = [
         "reader": hdf5.Reader,
         "path": f"{cwd}/testdata/h5_2d_cart_cpu/",
         "invalid_tstep": 71,
-        "fields": True,
-        "particles": True,
+        "fields": {
+            "sx1": 10,
+            "sx2": 20,
+            "nx1": 64,
+            "nx2": 128,
+        },
+        "particles": {
+            "num": [325, 325, 324, 325],
+        },
     },
     {
         "dim": "2D",
         "reader": hdf5.Reader,
         "path": f"{cwd}/testdata/h5_2d_cart_gpu/",
         "invalid_tstep": 81,
-        "fields": True,
-        "particles": True,
+        "fields": {
+            "sx1": 10,
+            "sx2": 20,
+            "nx1": 64,
+            "nx2": 128,
+        },
+        "particles": {
+            "dt": None,
+            "num": 327,
+        },
     },
     {
         "dim": "3D",
         "reader": hdf5.Reader,
         "path": f"{cwd}/testdata/h5_3d_cart_cpu/",
         "invalid_tstep": None,
-        "fields": True,
-        "particles": True,
+        "fields": {
+            "sx1": 10,
+            "sx2": 16,
+            "sx3": 12.5,
+            "nx1": 20,
+            "nx2": 32,
+            "nx3": 25,
+        },
+        "particles": {
+            "num": 639,
+        },
     },
     {
         "dim": "3D",
         "reader": hdf5.Reader,
         "path": f"{cwd}/testdata/h5_3d_cart_gpu/",
         "invalid_tstep": None,
-        "fields": False,
-        "particles": True,
+        "fields": {},
+        "particles": {
+            "dt": 0.1443375647,
+            "num": 640,
+        },
     },
     {
         "dim": "2D",
         "reader": adios2.Reader,
         "path": f"{cwd}/testdata/adios2_2d_cart_cpu/",
         "invalid_tstep": None,
-        "fields": True,
-        "particles": True,
+        "fields": {
+            "sx1": 10,
+            "sx2": 20,
+            "nx1": 64,
+            "nx2": 128,
+        },
+        "particles": {
+            "dt": None,
+            "num": [323, 324, 323, 324],
+        },
     },
     {
         "dim": "3D",
         "reader": adios2.Reader,
         "path": f"{cwd}/testdata/adios2_3d_cart_cpu/",
         "invalid_tstep": None,
-        "fields": True,
-        "particles": True,
+        "fields": {
+            "sx1": 10,
+            "sx2": 16,
+            "sx3": 12.5,
+            "nx1": 20,
+            "nx2": 32,
+            "nx3": 25,
+        },
+        "particles": {
+            "dt": None,
+            "num": 637,
+        },
     },
 ]

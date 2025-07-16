@@ -159,6 +159,7 @@ There are unit tests included with the code which also require downloading test 
 
 - [x] Unit tests
 - [x] Plugins for other simulation data formats
+- [ ] Support for sparse arrays for particles via `Sparse` library
 - [ ] Command-line interface
 - [ ] Support for multiple runs
 - [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)

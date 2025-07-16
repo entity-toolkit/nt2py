@@ -1,3 +1,6 @@
+import logging
+
+
 def annotatePulsar(
     ax, data, rmax, rstar=1.1, ti=None, time=None, attrs={}, ax_props={}, star_props={}
 ):
@@ -18,8 +21,8 @@ def annotatePulsar(
             )
         )
     ) is None:
-        print(
-            "WARNING: No spinup time or spin period found, please specify explicitly as `attrs = {'psr_omega': ..., 'psr_spinup_time': ...}`"
+        logging.warning(
+            "No spinup time or spin period found, please specify explicitly as `attrs = {'psr_omega': ..., 'psr_spinup_time': ...}`"
         )
         demo_rotation = False
         phase = 0

@@ -6,7 +6,7 @@ import xarray as xr
 
 from nt2.containers.container import BaseContainer
 from nt2.readers.base import BaseReader
-from nt2.utils import Layout, ToHumanReadable
+from nt2.utils import Layout
 
 
 class Fields(BaseContainer):
@@ -52,51 +52,23 @@ class Fields(BaseContainer):
         """
         super(Fields, self).__init__(**kwargs)
         if self.reader.DefinesCategory(self.path, "fields"):
+            self.__fields_defined = True
             self.__fields = self.__read_fields()
         else:
-            self.__fields = None
-        pass
+            self.__fields_defined = False
+            self.__fields = xr.Dataset()
 
     @property
-    def fields(self) -> xr.Dataset | None:
-        """xr.Dataset | None: The fields dataframe."""
+    def fields_defined(self) -> bool:
+        """bool: Whether the fields category is defined."""
+        return self.__fields_defined
+
+    @property
+    def fields(self) -> xr.Dataset:
+        """xr.Dataset: The fields dataframe."""
         return self.__fields
 
-    def to_str(self) -> str:
-        """
-        Returns
-        -------
-        str
-            String representation of the fields dataframe.
-
-        """
-
-        def compactify(lst):
-            c = ""
-            cntr = 0
-            for l_ in lst:
-                if cntr > 5:
-                    c += "\n                "
-                    cntr = 0
-                c += l_ + ", "
-                cntr += 1
-            return c[:-2]
-
-        string = ""
-        if self.fields is not None:
-            field_keys = list(self.fields.data_vars.keys())
-            string += "Fields:\n"
-            string += f"  - data axes: {compactify(self.fields.indexes.keys())}\n"
-            string += f"  - timesteps: {self.fields[field_keys[0]].shape[0]}\n"
-            string += f"  - shape: {self.fields[field_keys[0]].shape[1:]}\n"
-            string += f"  - quantities: {compactify(self.fields.data_vars.keys())}\n"
-            string += f"  - total size: {ToHumanReadable(self.fields.nbytes)}\n"
-        else:
-            string += "Fields: empty\n"
-
-        return string
-
-    def __read_fields(self):
+    def __read_fields(self) -> xr.Dataset:
         """Helper function to read the fields dataframe."""
         self.reader.VerifySameCategoryNames(self.path, "fields", "f")
         self.reader.VerifySameFieldShapes(self.path)
@@ -128,8 +100,6 @@ class Fields(BaseContainer):
         all_dims = {**times, **coords}.keys()
         all_coords = {**times, **coords, "s": ("t", steps["s"])}
 
-        self.reader.ReadFieldLayoutAtTimestep(self.path, first_step)
-
         def remap_name(name: str) -> str:
             """
             Remaps the field name if remap is provided
@@ -150,9 +120,9 @@ class Fields(BaseContainer):
         return xr.Dataset(
             {
                 remap_name(name): xr.DataArray(
-                    da.stack(  # type: ignore
+                    da.stack(
                         [
-                            da.from_delayed(  # type: ignore
+                            da.from_delayed(
                                 get_field(name, step),
                                 shape=shape[:: -1 if layout == Layout.R else 1],
                                 dtype="float",
