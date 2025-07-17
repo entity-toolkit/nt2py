@@ -145,11 +145,40 @@ nt2.Dashboard()
 
 This will output the port where the dashboard server is running, e.g., `Dashboard: http://127.0.0.1:8787/status`. Click on it (or enter in your browser) to open the dashboard.
 
+### CLI
+
+Since version 1.0.0, `nt2py` also offers a command-line interface, accessed via `nt2` command. To view all the options, simply run:
+
+```sh
+nt2 --help
+```
+
+The plotting routine is pretty customizable. For instance, if the data is located in `myrun/mysimulation`, you can inspect the content of the data structure using:
+
+```sh
+nt2 show myrun/mysimulation
+```
+
+Or if you want to make a quick plot (a-la `inspect` discussed above) of the specific quantities, you may simply run:
+
+```sh
+nt2 plot myrun/mysimulation --fields "E.*;B.*" --isel "t=5" --sel "x=slice(-5, None); z=0.5"
+```
+
+This plots the 6-th snapshot (`t=5`) of all the `E` and `B` field components, sliced for `x > -5`, and at `z = 0.5` (notice, that you can use both `--isel` and `--sel`). If instead, you prefer to make a movie, simply do not specify the time:
+
+```sh
+nt2 plot myrun/mysimulation --fields "E.*;B.*" --sel "x=slice(-5, None); z=0.5"
+```
+
+> If you want to only install the CLI, without the library itself, you may do that via `pipx`: `pipx install nt2py`. 
+
 ### Features
 
 1. Lazy loading and parallel processing of the simulation data with [`dask`](https://dask.org/).
 2. Context-aware data manipulation with [`xarray`](http://xarray.pydata.org/en/stable/).
 3. Parallel plotting and movie generation with [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html) and [`ffmpeg`](https://ffmpeg.org/).
+4. Command-line interface, the `nt2` command, for quick plotting (both movies and snapshots).
 
 ### Testing
 

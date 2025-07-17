@@ -1,3 +1,6 @@
+from typing import Any, Callable
+import matplotlib.figure as mfigure
+import xarray as xr
 from nt2.utils import DataIs2DPolar
 from nt2.plotters.export import makeFramesAndMovie
 
@@ -6,25 +9,92 @@ class _datasetInspectPlotAccessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
+    def __fixed_axes_grid_with_cbars(
+        self,
+        fields: list[str],
+        makeplot: Callable,
+        makecbar: Callable,
+        nrows: int,
+        ncols: int,
+        nfields: int,
+        size: float,
+        aspect: float,
+        pad: float,
+        cbar_w: float,
+        **fig_kwargs,
+    ):
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from mpl_toolkits.axes_grid1 import Divider, Size
+
+        if aspect > 1:
+            axw = size / aspect
+            axh = size
+        else:
+            axw = size
+            axh = size * aspect
+
+        fig_w = ncols * (axw + cbar_w + pad) + pad
+        fig_h = nrows * axh + (nrows + 1) * pad
+        fig = plt.figure(figsize=(fig_w, fig_h), **fig_kwargs)
+
+        h = []
+        for _ in range(ncols):
+            h += [Size.Fixed(pad), Size.Fixed(axw), Size.Fixed(cbar_w)]
+        h += [Size.Fixed(pad)]
+
+        v = []
+        for _ in range(nrows):
+            v += [Size.Fixed(pad), Size.Fixed(axh)]
+        v += [Size.Fixed(pad)]
+
+        divider = Divider(fig, (0, 0, 1, 1), h, v, aspect=False)
+        axes = []
+
+        cntr = 0
+        for i in range(nrows):
+            for j in range(ncols):
+                cntr += 1
+                if cntr > nfields:
+                    break
+                nx = 3 * j + 1
+                ny = 2 * (nrows - 1 - i) + 1
+
+                ax = fig.add_axes(
+                    divider.get_position(),
+                    axes_locator=divider.new_locator(nx=nx, ny=ny),
+                )
+                field = fields[cntr - 1]
+                im = makeplot(ax, field)
+                cax = fig.add_axes(
+                    divider.get_position(),
+                    axes_locator=divider.new_locator(nx=nx + 1, ny=ny),
+                )
+                fig.colorbar(im, cax=cax)
+                makecbar(ax, cax, field)
+                axes.append(ax)
+        return fig, axes
+
     def plot(
         self,
-        fig=None,
-        name=None,
-        skip_fields=[],
-        only_fields=[],
-        fig_kwargs={},
-        plot_kwargs={},
-        movie_kwargs={},
-    ):
+        fig: mfigure.Figure | None = None,
+        name: str | None = None,
+        skip_fields: list[str] = [],
+        only_fields: list[str] = [],
+        fig_kwargs: dict[str, Any] = {},
+        plot_kwargs: dict[str, Any] = {},
+        movie_kwargs: dict[str, Any] = {},
+        set_aspect: str | None = "equal",
+    ) -> mfigure.Figure | bool:
         """
         Plots the overview plot for fields at a given time or step (or as a movie).
 
         Kwargs
         ------
-        fig : matplotlib.figure.Figure, optional
+        fig : matplotlib.figure.Figure | None, optional
             The figure to plot the data (if None, a new figure is created). Default is None.
 
-        name : string, optional
+        name : string | None, optional
             Used when saving the frames and the movie. Default is None.
 
         skip_fields : list, optional
@@ -44,6 +114,9 @@ class _datasetInspectPlotAccessor:
 
         movie_kwargs : dict, optional
             Additional keyword arguments for makeMovie. Default is {}.
+
+        set_aspect : str | None, optional
+            If None, the aspect ratio will not be enforced. Otherwise, this value is passed to `set_aspect` method of the axes. Default is 'equal'.
 
         Returns
         -------
@@ -65,6 +138,7 @@ class _datasetInspectPlotAccessor:
                     only_fields,
                     fig_kwargs,
                     plot_kwargs,
+                    set_aspect,
                 )
 
             return makeFramesAndMovie(
@@ -76,10 +150,25 @@ class _datasetInspectPlotAccessor:
             )
         else:
             return self.plot_frame(
-                self._obj, fig, skip_fields, only_fields, fig_kwargs, plot_kwargs
+                self._obj,
+                fig,
+                skip_fields,
+                only_fields,
+                fig_kwargs,
+                plot_kwargs,
+                set_aspect,
             )
 
-    def plot_frame(self, data, fig, skip_fields, only_fields, fig_kwargs, plot_kwargs):
+    def plot_frame(
+        self,
+        data: xr.Dataset,
+        fig: mfigure.Figure | None,
+        skip_fields: list[str],
+        only_fields: list[str],
+        fig_kwargs: dict[str, Any],
+        plot_kwargs: dict[str, Any],
+        set_aspect: str | None,
+    ) -> mfigure.Figure:
         if len(data.dims) != 2:
             raise ValueError("Pass 2D data; use .sel or .isel to reduce dimension.")
 
@@ -113,67 +202,22 @@ class _datasetInspectPlotAccessor:
         if fields_to_plot == []:
             raise ValueError("No fields to plot.")
 
+        fields_to_plot = sorted(fields_to_plot)
         nfields = len(fields_to_plot)
 
         aspect = 1
         if DataIs2DPolar(data):
             aspect = 0.5
         else:
-            aspect = len(data[x1]) / len(data[x2])
-
-        ncols = 3 if aspect <= 1.15 else int(math.ceil(nfields / 3))
-        nrows = 3 if aspect > 1.15 else int(math.ceil(nfields / 3))
-
-        figsize0 = 3
-
-        if fig is None:
-            dpi = fig_kwargs.pop("dpi", 200)
-            fig = plt.figure(
-                figsize=(
-                    figsize0 * ncols * aspect * (1 + 0.2 / aspect),
-                    figsize0 * nrows,
-                ),
-                dpi=dpi,
-                **fig_kwargs,
+            aspect = (data[x1].values.max() - data[x1].values.min()) / (
+                data[x2].values.max() - data[x2].values.min()
             )
+            aspect = aspect[()]
 
-        gs = GridSpec(nrows, ncols, wspace=0.2 / aspect)
-        gs_for_axes = [
-            GridSpecFromSubplotSpec(
-                1,
-                2,
-                subplot_spec=gs[i],
-                width_ratios=[1, max(0.025 / aspect, 0.025)],
-                wspace=0.01,
-            )
-            for i in range(nfields)
-        ]
-        if aspect <= 1.15:
-            axes = [
-                fig.add_subplot(gs_for_axes[i * ncols + j][0])
-                for i in range(nrows)
-                for j in range(ncols)
-                if i * ncols + j < nfields
-            ]
-            cbars = [
-                fig.add_subplot(gs_for_axes[i * ncols + j][1])
-                for i in range(nrows)
-                for j in range(ncols)
-                if i * ncols + j < nfields
-            ]
-        else:
-            axes = [
-                fig.add_subplot(gs_for_axes[i * ncols + j][0])
-                for j in range(ncols)
-                for i in range(nrows)
-                if i * ncols + j < nfields
-            ]
-            cbars = [
-                fig.add_subplot(gs_for_axes[i * ncols + j][1])
-                for j in range(ncols)
-                for i in range(nrows)
-                if i * ncols + j < nfields
-            ]
+        ncols = max(1, int(math.floor(nfields * 1.5 * aspect / (1 + 1.5 * aspect))))
+        nrows = max(1, int(math.ceil(nfields / ncols)))
+
+        figsize0 = 3.0
 
         # find minmax for all components
         minmax: dict[str, None | tuple] = {
@@ -251,11 +295,11 @@ class _datasetInspectPlotAccessor:
 
         if DataIs2DPolar(data):
             raise NotImplementedError("Polar plots for inspect not implemented yet.")
-        else:
-            for fld, ax in zip(fields_to_plot, axes):
-                data[fld].plot(ax=ax, add_colorbar=False, **kwargs[fld])
 
-        for i, (ax, cbar, fld) in enumerate(zip(axes, cbars, fields_to_plot)):
+        def make_plot(ax, fld):
+            data[fld].plot(ax=ax, add_colorbar=False, **kwargs[fld])
+
+        def make_cbar(ax, cbar, fld):
             cbar.set(xticks=[], xlabel=None, ylabel=None)
             cbar.yaxis.tick_right()
             vmin, vmax = ax.collections[0].get_clim()
@@ -299,13 +343,23 @@ class _datasetInspectPlotAccessor:
                 + ("" if coeff_pow == 0 else f" [$\\cdot 10^{-coeff_pow}$]")
             )
 
+        fig, axes = self.__fixed_axes_grid_with_cbars(
+            fields=fields_to_plot,
+            makeplot=make_plot,
+            makecbar=make_cbar,
+            nrows=nrows,
+            ncols=ncols,
+            nfields=nfields,
+            size=figsize0,
+            aspect=aspect,
+            pad=0.5,
+            cbar_w=0.1,
+            **fig_kwargs,
+        )
+
         for n, ax in enumerate(axes):
-            if aspect > 1.15:
-                i = n % nrows
-                j = n // nrows
-            else:
-                i = n // ncols
-                j = n % ncols
+            i = n // ncols
+            j = n % ncols
 
             if j != 0:
                 ax.set(
@@ -317,7 +371,8 @@ class _datasetInspectPlotAccessor:
                     xlabel=None,
                     xticklabels=[],
                 )
-            ax.set(aspect=1)
+            if set_aspect is not None:
+                ax.set(aspect=set_aspect)
 
-        fig.suptitle(f"t = {data.t.values[()]:.2f}", y=0.95)
+        fig.suptitle(f"t = {data.t.values[()]:.2f}", y=1.0)
         return fig
