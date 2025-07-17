@@ -119,8 +119,8 @@ def plot(
         ),
     ] = "",
 ):
+    fname = os.path.basename(path.strip("/"))
     data = nt2.Data(path)
-    fname = os.path.basename(path)
     assert isinstance(
         sel, dict
     ), f"Invalid selection format: {sel}. Must be a dictionary."
