@@ -57,12 +57,39 @@ class Particles(BaseContainer):
 
         """
         super(Particles, self).__init__(**kwargs)
-        if self.reader.DefinesCategory(self.path, "particles"):
+        if (
+            self.reader.DefinesCategory(self.path, "particles")
+            and self.particles_present
+        ):
             self.__particles_defined = True
             self.__particles = self.__read_particles()
         else:
             self.__particles_defined = False
             self.__particles = {}
+
+    @property
+    def particles_present(self) -> bool:
+        """bool: Whether the particles are present in any of the timesteps."""
+        return len(self.nonempty_steps) > 0
+
+    @property
+    def nonempty_steps(self) -> list[int]:
+        """list[int]: List of timesteps that contain particles data."""
+        valid_steps = self.reader.GetValidSteps(self.path, "particles")
+        return [
+            step
+            for step in valid_steps
+            if len(
+                set(
+                    q.split("_")[0]
+                    for q in self.reader.ReadCategoryNamesAtTimestep(
+                        self.path, "particles", "p", step
+                    )
+                    if q.startswith("p")
+                )
+            )
+            > 0
+        ]
 
     @property
     def particles_defined(self) -> bool:
@@ -86,7 +113,8 @@ class Particles(BaseContainer):
         self.reader.VerifySameCategoryNames(self.path, "particles", "p")
         self.reader.VerifySameParticleShapes(self.path)
 
-        valid_steps = self.reader.GetValidSteps(self.path, "particles")
+        valid_steps = self.nonempty_steps
+        print(valid_steps)
         prtl_species = self.reader.ReadParticleSpeciesAtTimestep(
             self.path, valid_steps[0]
         )

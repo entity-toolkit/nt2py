@@ -248,3 +248,9 @@ class Data(Fields, Particles):
             string += "Particles: empty\n\n"
 
         return string
+
+    def __str__(self) -> str:
+        return self.to_str()
+
+    def __repr__(self) -> str:
+        return self.to_str()
