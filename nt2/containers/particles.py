@@ -114,7 +114,6 @@ class Particles(BaseContainer):
         self.reader.VerifySameParticleShapes(self.path)
 
         valid_steps = self.nonempty_steps
-        print(valid_steps)
         prtl_species = self.reader.ReadParticleSpeciesAtTimestep(
             self.path, valid_steps[0]
         )
