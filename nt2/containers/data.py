@@ -233,6 +233,8 @@ class Data(Fields, Particles):
             name_b = self.attrs.get("simulation.name")
             if isinstance(name_b, bytes):
                 name = name_b.decode("utf-8")
+            else:
+                name = str(name_b)
         return makeFramesAndMovie(
             name=name,
             data=self,
