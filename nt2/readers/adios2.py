@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, override
 import re
 import os
 import numpy as np
@@ -46,14 +46,36 @@ class Reader(BaseReader):
                     raise ValueError(f"{varname} not found in the BP file {filename}")
         return {newname: np.array(variables)}
 
+    def ReadEdgeCoordsAtTimestep(
+        self,
+        path: str,
+        step: int,
+    ) -> dict[str, Any]:
+        dct = {}
+        with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
+            vars = list(f.available_variables().keys())
+            for var in vars:
+                if var.startswith("X") and var.endswith("e"):
+                    var_obj = f.inquire_variable(var)
+                    if var_obj is not None:
+                        dct[var] = f.read(var_obj)
+        return dct
+
     def ReadAttrsAtTimestep(
         self,
         path: str,
         category: str,
         step: int,
     ) -> dict[str, Any]:
+        dct = {}
         with bp.FileReader(self.FullPath(path, category, step)) as f:
-            return {k: f.read_attribute(k) for k in f.available_attributes()}
+            dct = {k: f.read_attribute(k) for k in f.available_attributes()}
+            for i in range(1, 4):
+                if f"X{i}e" in f.available_variables():
+                    var = f.inquire_variable(f"X{i}e")
+                    if var is not None:
+                        dct[f"X{i}_e"] = f.read(var)
+        return dct
 
     def ReadArrayAtTimestep(
         self,

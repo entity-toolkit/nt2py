@@ -96,6 +96,28 @@ class BaseReader:
         """
         raise NotImplementedError("ReadAttrsAtTimestep is not implemented")
 
+    def ReadEdgeCoordsAtTimestep(
+        self,
+        path: str,
+        step: int,
+    ) -> dict[str, Any]:
+        """Read the coordinates of cell edges at a given timestep.
+
+        Parameters
+        ----------
+        path : str
+            The path to the files.
+        step : int
+            The timestep to be read.
+
+        Returns
+        -------
+        dict[str, Any]
+            A dictionary with the coordinates of the cell edges.
+
+        """
+        raise NotImplementedError("ReadEdgeCoordsAtTimestep is not implemented")
+
     def ReadArrayAtTimestep(
         self,
         path: str,

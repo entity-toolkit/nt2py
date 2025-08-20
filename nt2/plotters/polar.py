@@ -168,11 +168,9 @@ class _datasetPolarPlotAccessor:
         assert "t" not in self._obj[fth].dims, "Time must be specified"
         assert DataIs2DPolar(self._obj), "Data must be 2D polar"
 
-        useGreek = "θ" in self._obj.coords.keys()
-
         r, th = (
             self._obj.coords["r"].values,
-            self._obj.coords["θ" if useGreek else "th"].values,
+            self._obj.coords["th"].values,
         )
         _, ths = np.meshgrid(r, th)
         fxs = self._obj[fr] * np.sin(ths) + self._obj[fth] * np.cos(ths)
@@ -300,8 +298,6 @@ class _polarPlotAccessor:
         import matplotlib as mpl
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-        useGreek = "θ" in self._obj.coords.keys()
-
         ax = kwargs.pop("ax", plt.gca())
         cbar_size = kwargs.pop("cbar_size", "5%")
         cbar_pad = kwargs.pop("cbar_pad", 0.05)
@@ -332,19 +328,12 @@ class _polarPlotAccessor:
         vals = self._obj.values.flatten()
         vals = np.concatenate((vals, vals))
         if not cell_centered:
-            drs = self._obj.coords["r_2"] - self._obj.coords["r_1"]
-            dths = (
-                self._obj.coords["θ_2" if useGreek else "th_2"]
-                - self._obj.coords["θ_1" if useGreek else "th_1"]
-            )
-            r1s = self._obj.coords["r_1"] - drs * cell_size / 2
-            r2s = self._obj.coords["r_1"] + drs * cell_size / 2
-            th1s = (
-                self._obj.coords["θ_1" if useGreek else "th_1"] - dths * cell_size / 2
-            )
-            th2s = (
-                self._obj.coords["θ_1" if useGreek else "th_1"] + dths * cell_size / 2
-            )
+            drs = self._obj.coords["r_max"] - self._obj.coords["r_min"]
+            dths = self._obj.coords["th_max"] - self._obj.coords["th_min"]
+            r1s = self._obj.coords["r_min"] - drs * cell_size / 2
+            r2s = self._obj.coords["r_min"] + drs * cell_size / 2
+            th1s = self._obj.coords["th_min"] - dths * cell_size / 2
+            th2s = self._obj.coords["th_min"] + dths * cell_size / 2
             rs = np.ravel(np.column_stack((r1s, r2s)))
             ths = np.ravel(np.column_stack((th1s, th2s)))
             nr = len(rs)
@@ -358,10 +347,10 @@ class _polarPlotAccessor:
             points_4 = np.arange(nth * nr).reshape(nth, -1)[1::2, :-1:2].flatten()
 
         else:
-            rs = np.append(self._obj.coords["r_1"], self._obj.coords["r_2"][-1])
+            rs = np.append(self._obj.coords["r_min"], self._obj.coords["r_max"][-1])
             ths = np.append(
-                self._obj.coords["θ_1" if useGreek else "th_1"],
-                self._obj.coords["θ_2" if useGreek else "th_2"][-1],
+                self._obj.coords["th_min"],
+                self._obj.coords["th_max"][-1],
             )
             nr = len(rs)
             nth = len(ths)
@@ -447,8 +436,6 @@ class _polarPlotAccessor:
         import warnings
         import matplotlib.pyplot as plt
 
-        useGreek = "θ" in self._obj.coords.keys()
-
         ax = kwargs.pop("ax", plt.gca())
         title = kwargs.pop("title", None)
         invert_x = kwargs.pop("invert_x", False)
@@ -458,9 +445,7 @@ class _polarPlotAccessor:
         assert "t" not in self._obj.dims, "Time must be specified"
         assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
-        r, th = np.meshgrid(
-            self._obj.coords["r"], self._obj.coords["θ" if useGreek else "th"]
-        )
+        r, th = np.meshgrid(self._obj.coords["r"], self._obj.coords["th"])
         x, y = r * np.sin(th), r * np.cos(th)
         if invert_x:
             x = -x

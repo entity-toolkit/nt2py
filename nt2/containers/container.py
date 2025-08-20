@@ -1,5 +1,4 @@
 from typing import Callable
-import os
 
 from nt2.readers.base import BaseReader
 

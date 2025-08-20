@@ -148,7 +148,7 @@ class Data(Fields, Particles):
 
                         coord_system = CoordinateSystem.XYZ
 
-                    elif attrs["Coordinates"] in [b"sph", "sph"]:
+                    elif attrs["Coordinates"] in [b"sph", "sph", b"qsph", "qsph"]:
 
                         def remap_fields(name: str) -> str:
                             name = name[1:]

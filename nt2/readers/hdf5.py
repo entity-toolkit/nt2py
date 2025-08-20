@@ -64,8 +64,21 @@ class Reader(BaseReader):
         category: str,
         step: int,
     ) -> dict[str, Any]:
+        dct: dict[str, Any] = {}
         with h5py.File(self.FullPath(path, category, step), "r") as f:
-            return {k: v for k, v in f.attrs.items()}
+            dct = {k: v for k, v in f.attrs.items()}
+        return dct
+
+    def ReadEdgeCoordsAtTimestep(
+        self,
+        path: str,
+        step: int,
+    ) -> dict[str, Any]:
+        with h5py.File(self.FullPath(path, "fields", step), "r") as f:
+            f0 = Reader.__extract_step0(f)
+            return {
+                k: v[:] for k, v in f0.items() if k.startswith("X") and k.endswith("e")
+            }
 
     def ReadArrayAtTimestep(
         self,

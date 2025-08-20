@@ -97,8 +97,17 @@ class Fields(BaseContainer):
         times = self.reader.ReadPerTimestepVariable(self.path, "fields", "Time", "t")
         steps = self.reader.ReadPerTimestepVariable(self.path, "fields", "Step", "s")
 
+        edge_coords = self.reader.ReadEdgeCoordsAtTimestep(self.path, first_step)
+        if self.remap is not None and "coords" in self.remap:
+            new_edge_coords = {}
+            for coord in edge_coords.keys():
+                assoc_x = self.remap["coords"](coord[:-1])
+                new_edge_coords[assoc_x + "_min"] = (assoc_x, edge_coords[coord][:-1])
+                new_edge_coords[assoc_x + "_max"] = (assoc_x, edge_coords[coord][1:])
+            edge_coords = new_edge_coords
+
         all_dims = {**times, **coords}.keys()
-        all_coords = {**times, **coords, "s": ("t", steps["s"])}
+        all_coords = {**times, **coords, "s": ("t", steps["s"]), **edge_coords}
 
         def remap_name(name: str) -> str:
             """
