@@ -5,7 +5,7 @@ class _moviePlotAccessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
-    def plot(self, name, movie_kwargs={}, *args, **kwargs):
+    def plot(self, name, movie_kwargs={}, *args, **kwargs) -> bool:
         if "t" not in self._obj.dims:
             raise ValueError("The dataset does not have a time dimension.")
 

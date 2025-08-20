@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Any
 from nt2.utils import ToHumanReadable
 
 import xarray as xr
@@ -22,6 +22,7 @@ from nt2.plotters.polar import (
 
 from nt2.plotters.inspect import _datasetInspectPlotAccessor
 from nt2.plotters.movie import _moviePlotAccessor
+from nt2.plotters.export import makeFramesAndMovie
 
 
 @xr.register_dataset_accessor("polar")
@@ -103,6 +104,7 @@ class Data(Fields, Particles):
             self.__reader = reader
 
         # determine the coordinate system and remapping
+        self.__attrs: dict[str, Any] = {}
         for category in ["fields", "particles", "spectra"]:
             if self.__reader.DefinesCategory(path, category):
                 valid_steps = self.__reader.GetValidSteps(path, category)
@@ -110,6 +112,7 @@ class Data(Fields, Particles):
                     raise ValueError(f"No valid steps found for category {category}.")
                 first_step = valid_steps[0]
                 attrs = self.__reader.ReadAttrsAtTimestep(path, category, first_step)
+                self.__attrs.update(**attrs)
                 if "Coordinates" not in attrs:
                     raise ValueError(
                         f"Coordinates not found in attributes for category {category}."
@@ -200,19 +203,57 @@ class Data(Fields, Particles):
 
         super(Data, self).__init__(path=path, reader=self.__reader, remap=remap)
 
+    def makeMovie(self, plot, time=None, num_cpus=None, **movie_kwargs) -> bool:
+        f"""Create animation with provided plot function.
+        
+        Parameters
+        ----------
+        plot : callable
+            A function that takes a single argument (time in physical units) and produces a plot.
+        time : array_like, optional
+            An array of time values to use for the animation. If not provided, the entire time range will be used.
+        
+        Returns
+        -------
+        bool
+            True if the movie was created successfully, False otherwise.
+        """
+        if time is None:
+            if self.fields_defined:
+                time = self.fields.t.values
+            elif self.particles_defined:
+                species = sorted(list(self.particles.keys()))
+                time = self.particles[species[0]].t.values
+            else:
+                raise ValueError("No time values found.")
+        name: str = ""
+        if self.attrs.get("simulation.name", None) == None:
+            name = movie_kwargs.pop("name", "movie")
+        else:
+            name_b = self.attrs.get("simulation.name")
+            if isinstance(name_b, bytes):
+                name = name_b.decode("utf-8")
+        return makeFramesAndMovie(
+            name=name,
+            data=self,
+            plot=plot,
+            times=time,
+            num_cpus=num_cpus,
+            **movie_kwargs,
+        )
+
     @property
     def coordinate_system(self) -> CoordinateSystem:
         """CoordinateSystem: The coordinate system of the data."""
         return self.__coordinate_system
 
-    def to_str(self) -> str:
-        """
-        Returns
-        -------
-        str
-            String representation of the all the enclosed dataframes.
+    @property
+    def attrs(self) -> dict[str, Any]:
+        """dict[str, Any]: The attributes of the data."""
+        return self.__attrs
 
-        """
+    def to_str(self) -> str:
+        """str: String representation of the all the enclosed dataframes."""
 
         def compactify(lst):
             c = ""
