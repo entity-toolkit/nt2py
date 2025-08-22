@@ -1,3 +1,5 @@
+# pyright: reportUnusedParameter=false
+
 from typing import Any
 import os, re, logging, numpy as np
 
@@ -11,7 +13,9 @@ class BaseReader:
 
     """
 
-    def __init__(self):
+    skipped_files: list[str]
+
+    def __init__(self) -> None:
         """Initializer for the BaseReader class."""
         self.skipped_files = []
 
@@ -343,7 +347,7 @@ class BaseReader:
             A list of valid timesteps in the given path and category.
 
         """
-        steps = []
+        steps: list[int] = []
         for filename in BaseReader.CategoryFiles(
             path=path,
             category=category,
@@ -382,7 +386,7 @@ class BaseReader:
             A list of valid files in the given path and category.
 
         """
-        files = []
+        files: list[str] = []
         for filename in BaseReader.CategoryFiles(
             path=path,
             category=category,

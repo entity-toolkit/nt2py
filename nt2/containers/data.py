@@ -1,4 +1,5 @@
-from typing import Callable, Any
+from typing import Callable, Any, override
+from collections.abc import KeysView
 from nt2.utils import ToHumanReadable
 
 import xarray as xr
@@ -15,41 +16,38 @@ from nt2.readers.adios2 import Reader as BP5Reader
 from nt2.containers.fields import Fields
 from nt2.containers.particles import Particles
 
-from nt2.plotters.polar import (
-    _datasetPolarPlotAccessor,
-    _polarPlotAccessor,
-)
+import nt2.plotters.polar as acc_polar
 
-from nt2.plotters.inspect import _datasetInspectPlotAccessor
-from nt2.plotters.movie import _moviePlotAccessor
+import nt2.plotters.inspect as acc_inspect
+import nt2.plotters.movie as acc_movie
 from nt2.plotters.export import makeFramesAndMovie
 
 
 @xr.register_dataset_accessor("polar")
 @InheritClassDocstring
-class DatasetPolarPlotAccessor(_datasetPolarPlotAccessor):
+class DatasetPolarPlotAccessor(acc_polar.ds_accessor):
     pass
 
 
 @xr.register_dataarray_accessor("polar")
 @InheritClassDocstring
-class PolarPlotAccessor(_polarPlotAccessor):
+class PolarPlotAccessor(acc_polar.accessor):
     pass
 
 
 @xr.register_dataset_accessor("inspect")
 @InheritClassDocstring
-class DatasetInspectPlotAccessor(_datasetInspectPlotAccessor):
+class DatasetInspectPlotAccessor(acc_inspect.ds_accessor):
     pass
 
 
 @xr.register_dataarray_accessor("movie")
 @InheritClassDocstring
-class MoviePlotAccessor(_moviePlotAccessor):
+class MoviePlotAccessor(acc_movie.accessor):
     pass
 
 
-class Data(Fields, Particles):
+class Data(Fields, Particles):  # pyright: ignore[reportUnsafeMultipleInheritance]
     """Main class to manage all the data containers.
 
     Inherits from all category-specific containers.
@@ -203,7 +201,13 @@ class Data(Fields, Particles):
 
         super(Data, self).__init__(path=path, reader=self.__reader, remap=remap)
 
-    def makeMovie(self, plot, time=None, num_cpus=None, **movie_kwargs) -> bool:
+    def makeMovie(
+        self,
+        plot: Callable,  # pyright: ignore[reportMissingTypeArgument, reportUnknownParameterType]
+        time: list[float] | None = None,
+        num_cpus: int | None = None,
+        **movie_kwargs: Any,
+    ) -> bool:
         f"""Create animation with provided plot function.
         
         Parameters
@@ -226,6 +230,7 @@ class Data(Fields, Particles):
                 time = self.particles[species[0]].t.values
             else:
                 raise ValueError("No time values found.")
+        assert time is not None, "Time values must be provided."
         name: str = ""
         if self.attrs.get("simulation.name", None) == None:
             name = movie_kwargs.pop("name", "movie")
@@ -257,7 +262,7 @@ class Data(Fields, Particles):
     def to_str(self) -> str:
         """str: String representation of the all the enclosed dataframes."""
 
-        def compactify(lst):
+        def compactify(lst: list[Any] | KeysView[Any]) -> str:
             c = ""
             cntr = 0
             for l_ in lst:
@@ -270,12 +275,22 @@ class Data(Fields, Particles):
 
         string = ""
         if self.fields_defined:
-            field_keys = list(self.fields.data_vars.keys())
             string += "Fields:\n"
+            string += f"  - coordinates: {self.coordinate_system.value}\n"
             string += f"  - data axes: {compactify(self.fields.indexes.keys())}\n"
-            string += f"  - timesteps: {self.fields[field_keys[0]].shape[0]}\n"
-            string += f"  - shape: {self.fields[field_keys[0]].shape[1:]}\n"
-            string += f"  - quantities: {compactify(self.fields.data_vars.keys())}\n"
+            delta_t = (
+                self.fields.coords["t"].values[1] - self.fields.coords["t"].values[0]
+            ) / (self.fields.coords["s"].values[1] - self.fields.coords["s"].values[0])
+            string += f"    - dt: {delta_t:.2e}\n"
+            for key in self.fields.coords.keys():
+                crd = self.fields.coords[key].values
+                fmt = ""
+                if key != "s":
+                    fmt = ".2f"
+                string += f"    - {key}: {crd.min():{fmt}} -> {crd.max():{fmt}} [{len(crd)}]\n"
+            string += (
+                f"  - quantities: {compactify(sorted(self.fields.data_vars.keys()))}\n"
+            )
             string += f"  - total size: {ToHumanReadable(self.fields.nbytes)}\n\n"
         else:
             string += "Fields: empty\n\n"
@@ -292,8 +307,10 @@ class Data(Fields, Particles):
 
         return string
 
+    @override
     def __str__(self) -> str:
         return self.to_str()
 
+    @override
     def __repr__(self) -> str:
         return self.to_str()

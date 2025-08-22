@@ -5,15 +5,15 @@ from nt2.utils import DataIs2DPolar
 from nt2.plotters.export import makeFramesAndMovie
 
 
-class _datasetInspectPlotAccessor:
+class ds_accessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
     def __fixed_axes_grid_with_cbars(
         self,
         fields: list[str],
-        makeplot: Callable,
-        makecbar: Callable,
+        makeplot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+        makecbar: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
         nrows: int,
         ncols: int,
         nfields: int,
@@ -24,7 +24,6 @@ class _datasetInspectPlotAccessor:
         **fig_kwargs,
     ):
         import matplotlib.pyplot as plt
-        import numpy as np
         from mpl_toolkits.axes_grid1 import Divider, Size
 
         if aspect > 1:
@@ -130,8 +129,8 @@ class _datasetInspectPlotAccessor:
                     "Please provide a name for saving the frames and movie"
                 )
 
-            def plot_func(ti, _):
-                self.plot_frame(
+            def plot_func(ti: int, _):
+                _ = self.plot_frame(
                     self._obj.isel(t=ti),
                     None,
                     skip_fields,
@@ -174,8 +173,6 @@ class _datasetInspectPlotAccessor:
 
         x1, x2 = data.dims
 
-        import matplotlib.pyplot as plt
-        from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
         import matplotlib.colors as mcolors
         import numpy as np
         import re
@@ -220,7 +217,7 @@ class _datasetInspectPlotAccessor:
         figsize0 = 3.0
 
         # find minmax for all components
-        minmax: dict[str, None | tuple] = {
+        minmax: dict[str, None | tuple[float, float]] = {
             "E": None,
             "B": None,
             "J": None,

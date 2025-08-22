@@ -1,3 +1,5 @@
+# pyright: reportMissingTypeStubs=false
+
 from typing import Any, override
 import re
 import os
@@ -11,15 +13,18 @@ from nt2.readers.base import BaseReader
 
 class Reader(BaseReader):
     @property
+    @override
     def format(self) -> Format:
         return Format.BP5
 
     @staticmethod
+    @override
     def EnterFile(
         filename: str,
     ) -> bp.FileReader:
         return bp.FileReader(filename)
 
+    @override
     def ReadPerTimestepVariable(
         self,
         path: str,
@@ -27,13 +32,14 @@ class Reader(BaseReader):
         varname: str,
         newname: str,
     ) -> dict[str, np.ndarray]:
-        variables = []
+        variables: list[str] = []
         for filename in self.GetValidFiles(
             path=path,
             category=category,
         ):
             with bp.FileReader(os.path.join(path, category, filename)) as f:
-                vars = list(f.available_variables().keys())
+                avail: dict[str, Any] = f.available_variables()
+                vars: list[str] = list(avail.keys())
                 if varname in vars:
                     var = f.inquire_variable(varname)
                     if var is not None:
@@ -46,14 +52,16 @@ class Reader(BaseReader):
                     raise ValueError(f"{varname} not found in the BP file {filename}")
         return {newname: np.array(variables)}
 
+    @override
     def ReadEdgeCoordsAtTimestep(
         self,
         path: str,
         step: int,
     ) -> dict[str, Any]:
-        dct = {}
-        with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
-            vars = list(f.available_variables().keys())
+        dct: dict[str, Any] = {}
+        with bp.FileReader(self.FullPath(path, "fields", step)) as f:
+            avail: dict[str, Any] = f.available_variables()
+            vars: list[str] = list(avail.keys())
             for var in vars:
                 if var.startswith("X") and var.endswith("e"):
                     var_obj = f.inquire_variable(var)
@@ -61,22 +69,17 @@ class Reader(BaseReader):
                         dct[var] = f.read(var_obj)
         return dct
 
+    @override
     def ReadAttrsAtTimestep(
         self,
         path: str,
         category: str,
         step: int,
     ) -> dict[str, Any]:
-        dct = {}
         with bp.FileReader(self.FullPath(path, category, step)) as f:
-            dct = {k: f.read_attribute(k) for k in f.available_attributes()}
-            for i in range(1, 4):
-                if f"X{i}e" in f.available_variables():
-                    var = f.inquire_variable(f"X{i}e")
-                    if var is not None:
-                        dct[f"X{i}_e"] = f.read(var)
-        return dct
+            return {k: f.read_attribute(k) for k in f.available_attributes()}
 
+    @override
     def ReadArrayAtTimestep(
         self,
         path: str,
@@ -94,6 +97,7 @@ class Reader(BaseReader):
             else:
                 raise ValueError(f"{quantity} not found in the {filename}")
 
+    @override
     def ReadCategoryNamesAtTimestep(
         self,
         path: str,
@@ -102,8 +106,15 @@ class Reader(BaseReader):
         step: int,
     ) -> set[str]:
         with bp.FileReader(self.FullPath(path, category, step)) as f:
-            return set(c for c in f.available_variables() if c.startswith(prefix))
+            keys: list[str] = f.available_variables()
+            return set(
+                filter(
+                    lambda c: c.startswith(prefix),
+                    keys,
+                )
+            )
 
+    @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
     ) -> tuple[int]:
@@ -121,24 +132,25 @@ class Reader(BaseReader):
                     f"{category.capitalize()} {quantity} not found in the {filename}"
                 )
 
+    @override
     def ReadFieldCoordsAtTimestep(self, path: str, step: int) -> dict[str, Any]:
         with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
 
-            def get_coord(c):
+            def get_coord(c: str) -> Any:
                 f_c = f.inquire_variable(c)
                 if f_c is not None:
                     return f.read(f_c)
                 else:
                     raise ValueError(f"Field {c} is not a group in the {filename}")
 
-            return {
-                c: get_coord(c)
-                for c in list(f.available_variables())
-                if re.match(r"^X[1|2|3]$", c)
-            }
+            keys: list[str] = list(f.available_variables())
+            return {c: get_coord(c) for c in keys if re.match(r"^X[1|2|3]$", c)}
 
+    @override
     def ReadFieldLayoutAtTimestep(self, path: str, step: int) -> Layout:
         with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
-            if "LayoutRight" not in list(f.available_attributes().keys()):
+            attrs: dict[str, Any] = f.available_attributes()
+            keys = list(attrs.keys())
+            if "LayoutRight" not in keys:
                 raise ValueError(f"LayoutRight attribute not found in the {filename}")
             return Layout.R if f.read_attribute("LayoutRight") else Layout.L

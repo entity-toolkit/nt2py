@@ -7,14 +7,13 @@ import numpy as np
 
 from nt2.containers.container import BaseContainer
 from nt2.readers.base import BaseReader
-from nt2.utils import Layout, ToHumanReadable
 
 
 class Particles(BaseContainer):
     """Parent class to manage the particles dataframe."""
 
     @staticmethod
-    @dask.delayed  # type: ignore
+    @dask.delayed
     def __read_species_quantity(
         path: str, reader: BaseReader, species_quantity: str, step: int, pad: int
     ) -> Any:
@@ -47,7 +46,7 @@ class Particles(BaseContainer):
         )[0]
         return da.pad(arr, ((0, pad - shape),), mode="constant", constant_values=np.nan)
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """Initializer for the Particles class.
 
         Parameters
@@ -142,7 +141,9 @@ class Particles(BaseContainer):
         times = self.reader.ReadPerTimestepVariable(self.path, "particles", "Time", "t")
         steps = self.reader.ReadPerTimestepVariable(self.path, "particles", "Step", "s")
 
-        idxs = {sp: {"idx": np.arange(maxlens[sp])} for sp in prtl_species}
+        idxs: dict[int, dict[str, np.ndarray]] = {
+            sp: {"idx": np.arange(maxlens[sp])} for sp in prtl_species
+        }
 
         all_dims = {sp: {**times, **(idxs[sp])}.keys() for sp in prtl_species}
         all_coords = {

@@ -53,7 +53,7 @@ def MonopoleSampling(**kwargs):
     return np.linspace(0, np.pi, nth + 2)[1:-1]
 
 
-class _datasetPolarPlotAccessor:
+class ds_accessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
@@ -210,23 +210,23 @@ class _datasetPolarPlotAccessor:
 
         def integrate(delta, counter):
             r0, th0 = copy(r_th_start)
-            XY = np.array([r0 * np.sin(th0), r0 * np.cos(th0)])
-            RTH = [r0, th0]
-            fieldline = np.array([XY])
+            xy = np.array([r0 * np.sin(th0), r0 * np.cos(th0)])
+            rth = [r0, th0]
+            fieldline = np.array([xy])
             with np.errstate(divide="ignore", invalid="ignore"):
                 while range(counter, maxsteps):
-                    x, y = XY
+                    x, y = xy
                     r = np.sqrt(x**2 + y**2)
                     th = np.arctan2(-y, x) + np.pi / 2
-                    RTH = [r, th]
+                    rth = [r, th]
                     vx = interp_fx((th, r))[()]
                     vy = interp_fy((th, r))[()]
                     vmag = np.sqrt(vx**2 + vy**2)
-                    XY = XY + delta * np.array([vx, vy]) / vmag
-                    if stop(XY, RTH) or np.isnan(XY).any() or np.isinf(XY).any():
+                    xy = xy + delta * np.array([vx, vy]) / vmag
+                    if stop(xy, rth) or np.isnan(xy).any() or np.isinf(xy).any():
                         break
                     else:
-                        fieldline = np.append(fieldline, [XY], axis=0)
+                        fieldline = np.append(fieldline, [xy], axis=0)
             return fieldline
 
         if direction == "forward":
@@ -240,11 +240,11 @@ class _datasetPolarPlotAccessor:
             return np.append(f2[::-1], f1, axis=0)
 
 
-class _polarPlotAccessor:
-    def __init__(self, xarray_obj):
+class accessor:
+    def __init__(self, xarray_obj) -> None:
         self._obj = xarray_obj
 
-    def pcolor(self, **kwargs):
+    def pcolor(self, **kwargs) -> Any:
         """
         Plots a pseudocolor plot of 2D polar data on a rectilinear projection.
 

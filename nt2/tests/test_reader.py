@@ -72,10 +72,15 @@ def test_reader(test):
         else:
             dt = dx / np.sqrt(2) / 2
 
-        field_names = (
+        timestep = test.get("dt", None)
+        if timestep is not None:
+            dt = timestep
+
+        field_names = test["fields"].get(
+            "quantities",
             [f"{f}{i+1}" for i in range(3) for f in "BE"]
             + [f"N_{i}" for i in ["1_2", "3_4"]]
-            + [f"T0{c+1}_{i+1}" for i in range(4) for c in range(3)]
+            + [f"T0{c+1}_{i+1}" for i in range(4) for c in range(3)],
         )
         field_names = set(f"f{f}" for f in field_names)
         # Check that invalid_tstep raises OSError in fields
@@ -106,18 +111,19 @@ def test_reader(test):
         check_equal_arrays(names, field_names)
 
         # Check coords
-        coords = reader.ReadFieldCoordsAtTimestep(path=PATH, step=1)
-        x1 = np.array([x1min + i * dx for i in range(int(nx1))])
-        x2 = np.array([x2min + i * dx for i in range(int(nx2))])
-        check_equal_arrays(coords["X1"], x1)
-        check_equal_arrays(coords["X2"], x2)
+        if test.get("coords", "cart") == "cart":
+            coords = reader.ReadFieldCoordsAtTimestep(path=PATH, step=1)
+            x1 = np.array([x1min + i * dx for i in range(int(nx1))])
+            x2 = np.array([x2min + i * dx for i in range(int(nx2))])
+            check_equal_arrays(coords["X1"], x1)
+            check_equal_arrays(coords["X2"], x2)
 
-        if test["dim"] == "3D":
-            sx3 = test["fields"]["sx3"]
-            x3min = dx / 2
-            nx3 = test["fields"]["nx3"]
-            x3 = np.array([x3min + i * dx for i in range(int(nx3))])
-            check_equal_arrays(coords["X3"], x3)
+            if test["dim"] == "3D":
+                sx3 = test["fields"]["sx3"]
+                x3min = dx / 2
+                nx3 = test["fields"]["nx3"]
+                x3 = np.array([x3min + i * dx for i in range(int(nx3))])
+                check_equal_arrays(coords["X3"], x3)
 
         # Check field shapes
 
@@ -157,17 +163,25 @@ def test_reader(test):
                 dt = dx / np.sqrt(3) / 2
             else:
                 dt = dx / np.sqrt(2) / 2
-        else:
-            dt = test["particles"]["dt"]
+
+        timestep = test.get("dt", None)
+        if timestep is not None:
+            dt = timestep
+
+        nspec: int = test["particles"].get("nspec", 4)
 
         prtl_names = (
-            [f"U{i+1}_{j+1}" for i in range(3) for j in range(4)]
+            [f"U{i+1}_{j+1}" for i in range(3) for j in range(nspec)]
             + [
                 f"X{i+1}_{j+1}"
-                for i in range(2 if test["dim"] == "2D" else 3)
-                for j in range(4)
+                for i in range(
+                    2
+                    if test["dim"] == "2D" and test.get("coords", "cart") == "cart"
+                    else 3
+                )
+                for j in range(nspec)
             ]
-            + [f"W_{i+1}" for i in range(4)]
+            + [f"W_{i+1}" for i in range(nspec)]
         )
         prtl_names = set(f"p{p}" for p in prtl_names)
 
@@ -178,20 +192,23 @@ def test_reader(test):
         steps = reader.ReadPerTimestepVariable(
             path=PATH, category="particles", varname="Step", newname="s"
         )["s"]
-        check_equal_arrays(
-            times,
-            np.array([s * dt for s in steps]),
-        )
+
+        if dt is not None:
+            check_equal_arrays(
+                times,
+                np.array([s * dt for s in steps]),
+            )
 
         # Check that the names of the particle quantities are read correctly
         names = reader.ReadCategoryNamesAtTimestep(
             path=PATH, category="particles", prefix="p", step=1
         )
+        print(names, prtl_names)
         check_equal_arrays(names, prtl_names)
 
         # Check prtl shapes
         for step in reader.GetValidSteps(path=PATH, category="particles"):
-            for sp in range(4):
+            for sp in range(nspec):
                 shape = reader.ReadArrayShapeAtTimestep(
                     path=PATH,
                     category="particles",

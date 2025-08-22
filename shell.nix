@@ -9,7 +9,7 @@ pkgs.mkShell {
     pkgs."python${py}"
     pkgs."python${py}Packages".pip
     black
-    pyright
+    basedpyright
     taplo
     vscode-langservers-extracted
     zlib
@@ -32,4 +32,3 @@ pkgs.mkShell {
     echo "nt2dev nix-shell activated: $(which python)"
   '';
 }
-

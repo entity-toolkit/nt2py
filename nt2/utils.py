@@ -62,7 +62,7 @@ def DetermineDataFormat(path: str) -> Format:
     raise ValueError("Could not determine file format.")
 
 
-def ToHumanReadable(num: float | int, suffix="B") -> str:
+def ToHumanReadable(num: float | int, suffix: str = "B") -> str:
     """Convert a number to a human-readable format with SI prefixes.
 
     Parameters
@@ -98,7 +98,7 @@ def DataIs2DPolar(ds: xr.Dataset) -> bool:
     ) == 2
 
 
-def InheritClassDocstring(cls):
+def InheritClassDocstring(cls: type) -> type:
     """Decorator to inherit docstring from parent classes.
     This decorator appends the docstrings of all parent classes to the docstring of the class.
     """

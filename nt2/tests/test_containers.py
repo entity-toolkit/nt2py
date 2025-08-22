@@ -22,26 +22,42 @@ def test_fields(test, field_container: type[Data] | type[Fields]):
     PATH = test["path"]
     if test["fields"] == {}:
         return
+
+    coords: list[str] = ["x", "y", "z"]
+    flds: list[str] = ["Ex", "Ey", "Ez", "Bx", "By", "Bz"]
+
+    def coord_remap(Xold: str) -> str:
+        return {
+            "X1": "x",
+            "X2": "y",
+            "X3": "z",
+        }.get(Xold, Xold)
+
+    if test.get("coords", "cart") != "cart":
+        coords = ["r", "th", "ph"]
+        flds = ["Er", "Eth", "Eph", "Br", "Bth", "Bph"]
+        coord_remap = lambda Xold: {
+            "X1": "r",
+            "X2": "th",
+            "X3": "ph",
+        }.get(Xold, Xold)
+
+    def field_remap(Fold: str):
+        return {
+            f"f{F}{i+1}": f"{F}{x}" for i, x in enumerate(coords) for F in "EB"
+        }.get(Fold, Fold)
+
     fields = field_container(
         path=PATH,
         reader=reader,
-        remap={
-            "coords": lambda Xold: {
-                "X1": "x",
-                "X2": "y",
-                "X3": "z",
-            }.get(Xold, Xold),
-            "fields": lambda Fold: {
-                f"f{F}{i+1}": f"{F}{x}" for i, x in enumerate("xyz") for F in "EB"
-            }.get(Fold, Fold),
-        },
+        remap={"coords": coord_remap, "fields": field_remap},
     )
 
     steps = reader.GetValidSteps(path=PATH, category="fields")
     nx1 = test["fields"]["nx1"]
     nx2 = test["fields"]["nx2"]
     assert fields.fields is not None, "Fields are None"
-    for f in ["Ex", "Ey", "Ez", "Bx", "By", "Bz"]:
+    for f in flds:
         assert f in fields.fields, f"{f} is not in fields"
         if test["dim"] == "2D":
             xyzshape = (nx2, nx1)
@@ -63,19 +79,29 @@ def test_fields(test, field_container: type[Data] | type[Fields]):
             fields.fields[f].isel(t=0).shape,
             tuple([*xyzshape]),
         )
-        check_shape(
-            fields.fields[f].isel(x=0).shape,
-            tuple([len(steps), *yzshape]),
-        )
-        check_shape(
-            fields.fields[f].isel(y=0).shape,
-            tuple([len(steps), *xzshape]),
-        )
-
-        if test["dim"] == "3D":
+        if test.get("coords", "cart") == "cart":
             check_shape(
-                fields.fields[f].isel(z=0).shape,
-                tuple([len(steps), *xyshape]),
+                fields.fields[f].isel(x=0).shape,
+                tuple([len(steps), *yzshape]),
+            )
+            check_shape(
+                fields.fields[f].isel(y=0).shape,
+                tuple([len(steps), *xzshape]),
+            )
+
+            if test["dim"] == "3D":
+                check_shape(
+                    fields.fields[f].isel(z=0).shape,
+                    tuple([len(steps), *xyshape]),
+                )
+        else:
+            check_shape(
+                fields.fields[f].isel(r=0).shape,
+                tuple([len(steps), *yzshape]),
+            )
+            check_shape(
+                fields.fields[f].isel(th=0).shape,
+                tuple([len(steps), *xzshape]),
             )
 
 
@@ -88,25 +114,40 @@ def test_particles(test, particle_container: type[Data] | type[Particles]):
     PATH = test["path"]
     if test["particles"] == {}:
         return
+
+    prtl_coords: list[str] = ["x", "y", "z", "ux", "uy", "uz", "w"]
+
+    def prtl_remap(Xold: str) -> str:
+        return {
+            "pX1": "x",
+            "pX2": "y",
+            "pX3": "z",
+            "pU1": "ux",
+            "pU2": "uy",
+            "pU3": "uz",
+            "pW": "w",
+        }.get(Xold, Xold)
+
+    if test.get("coords", "cart") != "cart":
+        prtl_coords = ["r", "th", "ph", "ur", "uth", "uph", "w"]
+        prtl_remap = lambda Xold: {
+            "pX1": "r",
+            "pX2": "th",
+            "pX3": "ph",
+            "pU1": "ur",
+            "pU2": "uth",
+            "pU3": "uph",
+            "pW": "w",
+        }.get(Xold, Xold)
     particles = particle_container(
         path=PATH,
         reader=reader,
-        remap={
-            "particles": lambda Xold: {
-                "pX1": "x",
-                "pX2": "y",
-                "pX3": "z",
-                "pU1": "ux",
-                "pU2": "uy",
-                "pU3": "uz",
-                "pW": "w",
-            }.get(Xold, Xold),
-        },
+        remap={"particles": prtl_remap},
     )
     steps = reader.GetValidSteps(path=PATH, category="particles")
     assert particles.particles is not None, "Particles are None"
-    for p in ["x", "y", "z", "ux", "uy", "uz", "w"]:
-        if p == "z" and test["dim"] == "2D":
+    for p in prtl_coords:
+        if p == "z" and test["dim"] == "2D" and test.get("coords", "cart") == "cart":
             continue
         for i, (_, parts) in enumerate(particles.particles.items()):
             if isinstance(test["particles"]["num"], list):

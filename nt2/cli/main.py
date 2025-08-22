@@ -26,7 +26,7 @@ def check_sel(sel: str) -> dict[str, int | float | slice]:
     if sel == "":
         return {}
     sel_list = sel.strip().split(";")
-    sel_dict = {}
+    sel_dict: dict[str, int | float | slice] = {}
     for _, s in enumerate(sel_list):
         coord, arg = s.strip().split("=", 1)
         coord = coord.strip()
@@ -94,16 +94,16 @@ def plot(
             help="Which fields to plot (only when `what` is `fields`). Separate multiple fields with ';'. May contain regex. Empty = all fields. Example: `--fields \"E.*;B.*\"`",
         ),
     ] = "",
-    species: Annotated[
-        Annotated[
-            int,
-            typer.Option(
-                callback=check_species,
-                help="Which species to take (only when `what` is `particles`). 0 = all species",
-            ),
-        ],
-        str,
-    ] = 0,
+    # species: Annotated[
+    #     Annotated[
+    #         int,
+    #         typer.Option(
+    #             callback=check_species,
+    #             help="Which species to take (only when `what` is `particles`). 0 = all species",
+    #         ),
+    #     ],
+    #     str,
+    # ] = 0,
     sel: Annotated[
         str,
         typer.Option(
@@ -130,8 +130,12 @@ def plot(
         if sel != {}:
             slices = {}
             sels = {}
-            slices = {k: v for k, v in sel.items() if isinstance(v, slice)}
-            sels = {k: v for k, v in sel.items() if not isinstance(v, slice)}
+            slices: dict[str, slice | float | int] = {
+                k: v for k, v in sel.items() if isinstance(v, slice)
+            }
+            sels: dict[str, slice | float | int] = {
+                k: v for k, v in sel.items() if not isinstance(v, slice)
+            }
             d = d.sel(**sels, method="nearest")
             d = d.sel(**slices)
         if isel != {}:

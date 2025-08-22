@@ -13,7 +13,7 @@ class Fields(BaseContainer):
     """Parent class to manage the fields dataframe."""
 
     @staticmethod
-    @dask.delayed  # type: ignore
+    @dask.delayed
     def __read_field(path: str, reader: BaseReader, field: str, step: int) -> Any:
         """Reads a field from the data.
 
@@ -40,8 +40,8 @@ class Fields(BaseContainer):
 
     def __init__(
         self,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Initializer for the Fields class.
 
         Parameters
@@ -98,13 +98,20 @@ class Fields(BaseContainer):
         steps = self.reader.ReadPerTimestepVariable(self.path, "fields", "Step", "s")
 
         edge_coords = self.reader.ReadEdgeCoordsAtTimestep(self.path, first_step)
-        if self.remap is not None and "coords" in self.remap:
-            new_edge_coords = {}
-            for coord in edge_coords.keys():
-                assoc_x = self.remap["coords"](coord[:-1])
-                new_edge_coords[assoc_x + "_min"] = (assoc_x, edge_coords[coord][:-1])
-                new_edge_coords[assoc_x + "_max"] = (assoc_x, edge_coords[coord][1:])
-            edge_coords = new_edge_coords
+        if self.remap is None or "coords" not in self.remap:
+
+            def remap(x: str) -> str:
+                return x
+
+            coord_remap = remap
+        else:
+            coord_remap = self.remap["coords"]
+        new_edge_coords = {}
+        for coord in edge_coords.keys():
+            assoc_x = coord_remap(coord[:-1])
+            new_edge_coords[assoc_x + "_min"] = (assoc_x, edge_coords[coord][:-1])
+            new_edge_coords[assoc_x + "_max"] = (assoc_x, edge_coords[coord][1:])
+        edge_coords = new_edge_coords
 
         all_dims = {**times, **coords}.keys()
         all_coords = {**times, **coords, "s": ("t", steps["s"]), **edge_coords}

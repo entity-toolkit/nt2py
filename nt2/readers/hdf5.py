@@ -1,4 +1,6 @@
-from typing import Any
+# pyright: reportMissingTypeStubs=false
+
+from typing import Any, override
 import re
 import os
 import numpy as np
@@ -22,15 +24,18 @@ class Reader(BaseReader):
             raise ValueError(f"Wrong structure of the hdf5 file")
 
     @property
+    @override
     def format(self) -> Format:
         return Format.HDF5
 
     @staticmethod
+    @override
     def EnterFile(
         filename: str,
     ) -> h5py.File:
         return h5py.File(filename, "r")
 
+    @override
     def ReadPerTimestepVariable(
         self,
         path: str,
@@ -38,7 +43,7 @@ class Reader(BaseReader):
         varname: str,
         newname: str,
     ) -> dict[str, np.ndarray]:
-        variables = []
+        variables: list[Any] = []
         for filename in self.GetValidFiles(
             path=path,
             category=category,
@@ -58,17 +63,17 @@ class Reader(BaseReader):
 
         return {newname: np.array(variables)}
 
+    @override
     def ReadAttrsAtTimestep(
         self,
         path: str,
         category: str,
         step: int,
     ) -> dict[str, Any]:
-        dct: dict[str, Any] = {}
         with h5py.File(self.FullPath(path, category, step), "r") as f:
-            dct = {k: v for k, v in f.attrs.items()}
-        return dct
+            return {k: v for k, v in f.attrs.items()}
 
+    @override
     def ReadEdgeCoordsAtTimestep(
         self,
         path: str,
@@ -76,10 +81,9 @@ class Reader(BaseReader):
     ) -> dict[str, Any]:
         with h5py.File(self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            return {
-                k: v[:] for k, v in f0.items() if k.startswith("X") and k.endswith("e")
-            }
+            return {k: v[:] for k, v in f0.items() if k[0] == "X" and k[-1] == "e"}
 
+    @override
     def ReadArrayAtTimestep(
         self,
         path: str,
@@ -98,6 +102,7 @@ class Reader(BaseReader):
             else:
                 raise ValueError(f"{quantity} not found in the {filename}")
 
+    @override
     def ReadCategoryNamesAtTimestep(
         self,
         path: str,
@@ -107,8 +112,10 @@ class Reader(BaseReader):
     ) -> set[str]:
         with h5py.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            return set(c for c in list(f0.keys()) if c.startswith(prefix))
+            keys: list[str] = list(f0.keys())
+            return set(c for c in keys if c.startswith(prefix))
 
+    @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
     ) -> tuple[int]:
@@ -127,21 +134,22 @@ class Reader(BaseReader):
                     f"{category.capitalize()} {quantity} not found in the {filename}"
                 )
 
+    @override
     def ReadFieldCoordsAtTimestep(self, path: str, step: int) -> dict[str, Any]:
         with h5py.File(filename := self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
 
-            def get_coord(c):
+            def get_coord(c: str) -> Any:
                 f0_c = f0[c]
                 if isinstance(f0_c, h5py.Dataset):
                     return f0_c[:]
                 else:
                     raise ValueError(f"Field {c} is not a group in the {filename}")
 
-            return {
-                c: get_coord(c) for c in list(f0.keys()) if re.match(r"^X[1|2|3]$", c)
-            }
+            keys: list[str] = list(f0.keys())
+            return {c: get_coord(c) for c in keys if re.match(r"^X[1|2|3]$", c)}
 
+    @override
     def ReadFieldLayoutAtTimestep(self, path: str, step: int) -> Layout:
         with h5py.File(filename := self.FullPath(path, "fields", step), "r") as f:
             if "LayoutRight" not in f.attrs:
