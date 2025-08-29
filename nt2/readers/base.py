@@ -1,7 +1,8 @@
 # pyright: reportUnusedParameter=false
 
 from typing import Any
-import os, re, logging, numpy as np
+import numpy.typing as npt
+import os, re, logging
 
 from nt2.utils import Format, Layout
 
@@ -53,7 +54,7 @@ class BaseReader:
         category: str,
         varname: str,
         newname: str,
-    ) -> dict[str, np.ndarray]:
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read a variable at each timestep and return a dictionary with the new name.
 
         Parameters
@@ -69,7 +70,7 @@ class BaseReader:
 
         Returns
         -------
-        dict[str, np.ndarray]
+        dict[str, NDArray[Any]]
             A dictionary with the new name and the variable at each timestep.
 
         """
@@ -104,7 +105,7 @@ class BaseReader:
         self,
         path: str,
         step: int,
-    ) -> dict[str, Any]:
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read the coordinates of cell edges at a given timestep.
 
         Parameters
@@ -116,7 +117,7 @@ class BaseReader:
 
         Returns
         -------
-        dict[str, Any]
+        dict[str, NDArray[Any]]
             A dictionary with the coordinates of the cell edges.
 
         """
@@ -128,7 +129,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> Any:
+    ) -> npt.NDArray[Any]:
         """Read an array at a given timestep.
 
         Parameters
@@ -144,7 +145,7 @@ class BaseReader:
 
         Returns
         -------
-        Any
+        NDArray[Any]
             The array at a given timestep.
 
         """
@@ -231,7 +232,7 @@ class BaseReader:
         self,
         path: str,
         step: int,
-    ) -> dict[str, Any]:
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read the coordinates of the fields at a given timestep.
 
         Parameters
@@ -243,7 +244,7 @@ class BaseReader:
 
         Returns
         -------
-        dict[str, Any]
+        dict[str, NDArray[Any]]
             A dictionary with the coordinates of the fields where the keys are the names of the coordinates and the values are.
 
         """

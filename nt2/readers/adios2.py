@@ -4,6 +4,7 @@ from typing import Any, override
 import re
 import os
 import numpy as np
+import numpy.typing as npt
 
 import adios2 as bp
 
@@ -31,8 +32,8 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
-    ) -> dict[str, np.ndarray]:
-        variables: list[str] = []
+    ) -> dict[str, npt.NDArray[Any]]:
+        variables: list[float] = []
         for filename in self.GetValidFiles(
             path=path,
             category=category,
@@ -58,7 +59,7 @@ class Reader(BaseReader):
         path: str,
         step: int,
     ) -> dict[str, Any]:
-        dct: dict[str, Any] = {}
+        dct: dict[str, npt.NDArray[Any]] = {}
         with bp.FileReader(self.FullPath(path, "fields", step)) as f:
             avail: dict[str, Any] = f.available_variables()
             vars: list[str] = list(avail.keys())
@@ -86,12 +87,12 @@ class Reader(BaseReader):
         category: str,
         quantity: str,
         step: int,
-    ) -> Any:
+    ) -> npt.NDArray[Any]:
         with bp.FileReader(filename := self.FullPath(path, category, step)) as f:
             if quantity in f.available_variables():
                 var = f.inquire_variable(quantity)
                 if var is not None:
-                    return f.read(var)
+                    return np.array(f.read(var))
                 else:
                     raise ValueError(f"{quantity} not found in the {filename}")
             else:
@@ -133,13 +134,15 @@ class Reader(BaseReader):
                 )
 
     @override
-    def ReadFieldCoordsAtTimestep(self, path: str, step: int) -> dict[str, Any]:
+    def ReadFieldCoordsAtTimestep(
+        self, path: str, step: int
+    ) -> dict[str, npt.NDArray[Any]]:
         with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
 
-            def get_coord(c: str) -> Any:
+            def get_coord(c: str) -> npt.NDArray[Any]:
                 f_c = f.inquire_variable(c)
                 if f_c is not None:
-                    return f.read(f_c)
+                    return np.array(f.read(f_c))
                 else:
                     raise ValueError(f"Field {c} is not a group in the {filename}")
 

@@ -4,6 +4,7 @@ from typing import Any, override
 import re
 import os
 import numpy as np
+import numpy.typing as npt
 
 import h5py
 
@@ -42,7 +43,7 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
-    ) -> dict[str, np.ndarray]:
+    ) -> dict[str, npt.NDArray[Any]]:
         variables: list[Any] = []
         for filename in self.GetValidFiles(
             path=path,
@@ -78,7 +79,7 @@ class Reader(BaseReader):
         self,
         path: str,
         step: int,
-    ) -> dict[str, Any]:
+    ) -> dict[str, npt.NDArray[Any]]:
         with h5py.File(self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
             return {k: v[:] for k, v in f0.items() if k[0] == "X" and k[-1] == "e"}
@@ -90,13 +91,13 @@ class Reader(BaseReader):
         category: str,
         quantity: str,
         step: int,
-    ) -> Any:
+    ) -> npt.NDArray[Any]:
         with h5py.File(filename := self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
             if quantity in f0.keys():
                 var = f0[quantity]
                 if isinstance(var, h5py.Dataset):
-                    return var[:]
+                    return np.array(var[:])
                 else:
                     raise ValueError(f"{quantity} is not a group in the {filename}")
             else:
@@ -135,7 +136,9 @@ class Reader(BaseReader):
                 )
 
     @override
-    def ReadFieldCoordsAtTimestep(self, path: str, step: int) -> dict[str, Any]:
+    def ReadFieldCoordsAtTimestep(
+        self, path: str, step: int
+    ) -> dict[str, npt.NDArray[Any]]:
         with h5py.File(filename := self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
 

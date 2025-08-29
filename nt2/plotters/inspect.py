@@ -1,4 +1,7 @@
+# pyright: reportMissingTypeStubs=false
+
 from typing import Any, Callable
+import matplotlib.pyplot as plt
 import matplotlib.figure as mfigure
 import xarray as xr
 from nt2.utils import DataIs2DPolar
@@ -6,8 +9,8 @@ from nt2.plotters.export import makeFramesAndMovie
 
 
 class ds_accessor:
-    def __init__(self, xarray_obj):
-        self._obj = xarray_obj
+    def __init__(self, xarray_obj: xr.Dataset):
+        self._obj: xr.Dataset = xarray_obj
 
     def __fixed_axes_grid_with_cbars(
         self,
@@ -21,9 +24,8 @@ class ds_accessor:
         aspect: float,
         pad: float,
         cbar_w: float,
-        **fig_kwargs,
-    ):
-        import matplotlib.pyplot as plt
+        **fig_kwargs: Any,
+    ) -> tuple[mfigure.Figure, list[plt.Axes]]:
         from mpl_toolkits.axes_grid1 import Divider, Size
 
         if aspect > 1:
@@ -48,7 +50,7 @@ class ds_accessor:
         v += [Size.Fixed(pad)]
 
         divider = Divider(fig, (0, 0, 1, 1), h, v, aspect=False)
-        axes = []
+        axes: list[plt.Axes] = []
 
         cntr = 0
         for i in range(nrows):
@@ -69,7 +71,7 @@ class ds_accessor:
                     divider.get_position(),
                     axes_locator=divider.new_locator(nx=nx + 1, ny=ny),
                 )
-                fig.colorbar(im, cax=cax)
+                _ = fig.colorbar(im, cax=cax)
                 makecbar(ax, cax, field)
                 axes.append(ax)
         return fig, axes
@@ -78,11 +80,11 @@ class ds_accessor:
         self,
         fig: mfigure.Figure | None = None,
         name: str | None = None,
-        skip_fields: list[str] = [],
-        only_fields: list[str] = [],
-        fig_kwargs: dict[str, Any] = {},
-        plot_kwargs: dict[str, Any] = {},
-        movie_kwargs: dict[str, Any] = {},
+        skip_fields: list[str] | None = None,
+        only_fields: list[str] | None = None,
+        fig_kwargs: dict[str, Any] | None = None,
+        plot_kwargs: dict[str, Any] | None = None,
+        movie_kwargs: dict[str, Any] | None = None,
         set_aspect: str | None = "equal",
     ) -> mfigure.Figure | bool:
         """
@@ -123,6 +125,16 @@ class ds_accessor:
             The figure with the plotted data (if single timestep) or True/False.
 
         """
+        if skip_fields is None:
+            skip_fields = []
+        if only_fields is None:
+            only_fields = []
+        if fig_kwargs is None:
+            fig_kwargs = {}
+        if plot_kwargs is None:
+            plot_kwargs = {}
+        if movie_kwargs is None:
+            movie_kwargs = {}
         if "t" in self._obj.dims:
             if name is None:
                 raise ValueError(
@@ -181,17 +193,14 @@ class ds_accessor:
         # count the number of subplots
         nfields = len(data.data_vars)
         if nfields > 0:
+            keys: list[str] = [str(k) for k in data.keys()]
             if len(only_fields) == 0:
                 fields_to_plot = [
-                    f
-                    for f in list(data.keys())
-                    if not any([re.match(sf, f) for sf in skip_fields])
+                    f for f in keys if not any([re.match(sf, f) for sf in skip_fields])
                 ]
             else:
                 fields_to_plot = [
-                    f
-                    for f in list(data.keys())
-                    if any([re.match(sf, f) for sf in only_fields])
+                    f for f in keys if any([re.match(sf, f) for sf in only_fields])
                 ]
         else:
             fields_to_plot = []
@@ -293,11 +302,11 @@ class ds_accessor:
         if DataIs2DPolar(data):
             raise NotImplementedError("Polar plots for inspect not implemented yet.")
 
-        def make_plot(ax, fld):
+        def make_plot(ax: plt.Axes, fld: str):
             data[fld].plot(ax=ax, add_colorbar=False, **kwargs[fld])
 
-        def make_cbar(ax, cbar, fld):
-            cbar.set(xticks=[], xlabel=None, ylabel=None)
+        def make_cbar(ax: plt.Axes, cbar: plt.Axes, fld: str):
+            _ = cbar.set(xticks=[], xlabel=None, ylabel=None)
             cbar.yaxis.tick_right()
             vmin, vmax = ax.collections[0].get_clim()
             if vmin == vmax:
@@ -311,10 +320,10 @@ class ds_accessor:
                 vmin /= coeff
                 vmax /= coeff
             if isinstance(ax.collections[0].norm, mcolors.LogNorm):
-                cbar.set(ylim=(vmin, vmax), yscale="log")
+                _ = cbar.set(ylim=(vmin, vmax), yscale="log")
                 data_norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
                 ys = np.logspace(np.log10(vmin), np.log10(vmax))
-                cbar.pcolor(
+                _ = cbar.pcolor(
                     [0, 1],
                     ys,
                     np.transpose([ys] * 2),
@@ -325,9 +334,9 @@ class ds_accessor:
             elif isinstance(ax.collections[0].norm, mcolors.SymLogNorm):
                 raise NotImplementedError("SymLogNorm not implemented yet.")
             else:
-                cbar.set(ylim=(vmin, vmax))
+                _ = cbar.set(ylim=(vmin, vmax))
                 ys = np.linspace(vmin, vmax)
-                cbar.pcolor(
+                _ = cbar.pcolor(
                     [0, 1],
                     ys,
                     np.transpose([ys] * 2),
@@ -335,7 +344,7 @@ class ds_accessor:
                     rasterized=True,
                     norm=mcolors.Normalize(vmin=vmin, vmax=vmax),
                 )
-            ax.set(
+            _ = ax.set(
                 title=f"{fld}"
                 + ("" if coeff_pow == 0 else f" [$\\cdot 10^{-coeff_pow}$]")
             )
@@ -359,17 +368,17 @@ class ds_accessor:
             j = n % ncols
 
             if j != 0:
-                ax.set(
+                _ = ax.set(
                     ylabel=None,
                     yticklabels=[],
                 )
             if (nfields - i * ncols - j) > ncols:
-                ax.set(
+                _ = ax.set(
                     xlabel=None,
                     xticklabels=[],
                 )
             if set_aspect is not None:
-                ax.set(aspect=set_aspect)
+                _ = ax.set(aspect=set_aspect)
 
-        fig.suptitle(f"t = {data.t.values[()]:.2f}", y=1.0)
+        _ = fig.suptitle(f"t = {data.t.values[()]:.2f}", y=1.0)
         return fig
