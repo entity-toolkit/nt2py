@@ -1,4 +1,12 @@
-from typing import Callable, Any, override
+from typing import Callable, Any
+
+import sys
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+    def override(method):
+        return method
+
 from collections.abc import KeysView
 from nt2.utils import ToHumanReadable
 
