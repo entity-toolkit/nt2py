@@ -12,8 +12,46 @@ class ds_accessor:
     def __init__(self, xarray_obj: xr.Dataset):
         self._obj: xr.Dataset = xarray_obj
 
-    def __fixed_axes_grid_with_cbars(
+    def __axes_grid(
         self,
+        grouped_fields: dict[str, list[str]],
+        makeplot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+        nrows: int,
+        ncols: int,
+        nfields: int,
+        size: float,
+        aspect: float,
+        pad: float,
+        **fig_kwargs: Any,
+    ) -> tuple[mfigure.Figure, list[plt.Axes]]:
+        if aspect > 1:
+            axw = size / aspect
+            axh = size
+        else:
+            axw = size
+            axh = size * aspect
+
+        fig_w = ncols * (axw + pad) + pad
+        fig_h = nrows * axh + (nrows + 1) * pad
+        fig = plt.figure(figsize=(fig_w, fig_h), **fig_kwargs)
+
+        gs = fig.add_gridspec(nrows, ncols, wspace=pad / axw, hspace=pad / axh)
+        axes = [
+            fig.add_subplot(gs[i, j])
+            for i in range(nrows)
+            for j in range(ncols)
+            if (i * ncols + j) < nfields
+        ]
+        for ax, (g, fields) in zip(axes, grouped_fields.items()):
+            for field in fields:
+                makeplot(ax, field)
+            _ = ax.set_ylabel(g)
+            _ = ax.set_title(None)
+
+        return fig, axes
+
+    @staticmethod
+    def _fixed_axes_grid_with_cbars(
         fields: list[str],
         makeplot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
         makecbar: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
@@ -142,15 +180,29 @@ class ds_accessor:
                 )
 
             def plot_func(ti: int, _):
-                _ = self.plot_frame(
-                    self._obj.isel(t=ti),
-                    None,
-                    skip_fields,
-                    only_fields,
-                    fig_kwargs,
-                    plot_kwargs,
-                    set_aspect,
-                )
+                if len(self._obj.dims) == 1:
+                    _ = self.plot_frame_1d(
+                        self._obj.isel(t=ti),
+                        None,
+                        skip_fields,
+                        only_fields,
+                        fig_kwargs,
+                        plot_kwargs,
+                    )
+                elif len(self._obj.dims) == 2:
+                    _ = self.plot_frame_2d(
+                        self._obj.isel(t=ti),
+                        None,
+                        skip_fields,
+                        only_fields,
+                        fig_kwargs,
+                        plot_kwargs,
+                        set_aspect,
+                    )
+                else:
+                    raise ValueError(
+                        "Data has more than 2 dimensions; use .sel or .isel to reduce dimension."
+                    )
 
             return makeFramesAndMovie(
                 name=name,
@@ -160,37 +212,36 @@ class ds_accessor:
                 **movie_kwargs,
             )
         else:
-            return self.plot_frame(
-                self._obj,
-                fig,
-                skip_fields,
-                only_fields,
-                fig_kwargs,
-                plot_kwargs,
-                set_aspect,
-            )
+            if len(self._obj.dims) == 1:
+                return self.plot_frame_1d(
+                    self._obj,
+                    fig,
+                    skip_fields,
+                    only_fields,
+                    fig_kwargs,
+                    plot_kwargs,
+                )
+            elif len(self._obj.dims) == 2:
+                return self.plot_frame_2d(
+                    self._obj,
+                    fig,
+                    skip_fields,
+                    only_fields,
+                    fig_kwargs,
+                    plot_kwargs,
+                    set_aspect,
+                )
+            else:
+                raise ValueError(
+                    "Data has more than 2 dimensions; use .sel or .isel to reduce dimension."
+                )
 
-    def plot_frame(
-        self,
-        data: xr.Dataset,
-        fig: mfigure.Figure | None,
-        skip_fields: list[str],
-        only_fields: list[str],
-        fig_kwargs: dict[str, Any],
-        plot_kwargs: dict[str, Any],
-        set_aspect: str | None,
-    ) -> mfigure.Figure:
-        if len(data.dims) != 2:
-            raise ValueError("Pass 2D data; use .sel or .isel to reduce dimension.")
-
-        x1, x2 = data.dims
-
-        import matplotlib.colors as mcolors
-        import numpy as np
+    @staticmethod
+    def _get_fields_to_plot(
+        data: xr.Dataset, skip_fields: list[str], only_fields: list[str]
+    ) -> list[str]:
         import re
-        import math
 
-        # count the number of subplots
         nfields = len(data.data_vars)
         if nfields > 0:
             keys: list[str] = [str(k) for k in data.keys()]
@@ -209,23 +260,12 @@ class ds_accessor:
             raise ValueError("No fields to plot.")
 
         fields_to_plot = sorted(fields_to_plot)
-        nfields = len(fields_to_plot)
+        return fields_to_plot
 
-        aspect = 1
-        if DataIs2DPolar(data):
-            aspect = 0.5
-        else:
-            aspect = (data[x1].values.max() - data[x1].values.min()) / (
-                data[x2].values.max() - data[x2].values.min()
-            )
-            aspect = aspect[()]
-
-        ncols = max(1, int(math.floor(nfields * 1.5 * aspect / (1 + 1.5 * aspect))))
-        nrows = max(1, int(math.ceil(nfields / ncols)))
-
-        figsize0 = 3.0
-
-        # find minmax for all components
+    @staticmethod
+    def _get_fields_minmax(
+        data: xr.Dataset, fields: list[str]
+    ) -> dict[str, None | tuple[float, float]]:
         minmax: dict[str, None | tuple[float, float]] = {
             "E": None,
             "B": None,
@@ -233,7 +273,7 @@ class ds_accessor:
             "N": None,
             "T": None,
         }
-        for fld in fields_to_plot:
+        for fld in fields:
             vmin, vmax = (
                 data[fld].min().values[()],
                 data[fld].max().values[()],
@@ -256,6 +296,122 @@ class ds_accessor:
                     else:
                         vmin = -vmax
                     minmax[f] = (vmin, vmax)
+
+        return minmax
+
+    def plot_frame_1d(
+        self,
+        data: xr.Dataset,
+        fig: mfigure.Figure | None,
+        skip_fields: list[str],
+        only_fields: list[str],
+        fig_kwargs: dict[str, Any],
+        plot_kwargs: dict[str, Any],
+    ) -> mfigure.Figure:
+        if len(data.dims) != 1:
+            raise ValueError("Pass 1D data; use .sel or .isel to reduce dimension.")
+
+        import math, re
+
+        # count the number of subplots
+        fields_to_plot = self._get_fields_to_plot(data, skip_fields, only_fields)
+
+        # group fields by their first letter
+        grouped_fields: dict[str, list[str]] = {}
+        for f in fields_to_plot:
+            key = f[0]
+            if key not in grouped_fields:
+                grouped_fields[key] = []
+            grouped_fields[key].append(f)
+
+        nplots = len(grouped_fields)
+
+        aspect = 0.5
+        ncols = max(1, int(math.floor(nplots * 1.5 * aspect / (1 + 1.5 * aspect))))
+        nrows = max(1, int(math.ceil(nplots / ncols)))
+
+        figsize0 = 3.0
+
+        minmax = self._get_fields_minmax(data, fields_to_plot)
+        kwargs = {}
+        for fld in fields_to_plot:
+            kwargs[fld] = {}
+            for fld_kwargs in plot_kwargs:
+                if re.match(fld_kwargs, fld):
+                    kwargs[fld] = {**plot_kwargs[fld_kwargs]}
+                    break
+
+        def make_plot(ax: plt.Axes, fld: str):
+            data[fld].plot(ax=ax, label=fld, **kwargs[fld])
+            _ = ax.set(ylim=minmax[fld[0]])
+
+        fig, axes = self.__axes_grid(
+            grouped_fields=grouped_fields,
+            makeplot=make_plot,
+            nrows=nrows,
+            ncols=ncols,
+            nfields=nplots,
+            size=figsize0,
+            aspect=aspect,
+            pad=0.5,
+            **fig_kwargs,
+        )
+        for n, ax in enumerate(axes):
+            i = n // ncols
+            j = n % ncols
+
+            if j != 0:
+                _ = ax.set(
+                    ylabel=None,
+                    yticklabels=[],
+                )
+            if (nplots - i * ncols - j) > ncols:
+                _ = ax.set(
+                    xlabel=None,
+                    xticklabels=[],
+                )
+            _ = ax.legend(loc="best", fontsize="small")
+        _ = fig.suptitle(f"t = {data.t.values[()]:.2f}", y=0.95)
+        return fig
+
+    def plot_frame_2d(
+        self,
+        data: xr.Dataset,
+        fig: mfigure.Figure | None,
+        skip_fields: list[str],
+        only_fields: list[str],
+        fig_kwargs: dict[str, Any],
+        plot_kwargs: dict[str, Any],
+        set_aspect: str | None,
+    ) -> mfigure.Figure:
+        if len(data.dims) != 2:
+            raise ValueError("Pass 2D data; use .sel or .isel to reduce dimension.")
+
+        x1, x2 = data.dims
+
+        import matplotlib.colors as mcolors
+        import numpy as np
+        import math, re
+
+        # count the number of subplots
+        fields_to_plot = self._get_fields_to_plot(data, skip_fields, only_fields)
+        nfields = len(fields_to_plot)
+
+        aspect = 1
+        if DataIs2DPolar(data):
+            aspect = 0.5
+        else:
+            aspect = (data[x1].values.max() - data[x1].values.min()) / (
+                data[x2].values.max() - data[x2].values.min()
+            )
+            aspect = aspect[()]
+
+        ncols = max(1, int(math.floor(nfields * 1.5 * aspect / (1 + 1.5 * aspect))))
+        nrows = max(1, int(math.ceil(nfields / ncols)))
+
+        figsize0 = 3.0
+
+        minmax = self._get_fields_minmax(data, fields_to_plot)
 
         kwargs = {}
         for fld in fields_to_plot:
@@ -349,7 +505,7 @@ class ds_accessor:
                 + ("" if coeff_pow == 0 else f" [$\\cdot 10^{-coeff_pow}$]")
             )
 
-        fig, axes = self.__fixed_axes_grid_with_cbars(
+        fig, axes = self._fixed_axes_grid_with_cbars(
             fields=fields_to_plot,
             makeplot=make_plot,
             makecbar=make_cbar,
