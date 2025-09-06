@@ -398,13 +398,13 @@ class ds_accessor:
         nfields = len(fields_to_plot)
 
         aspect = 1
-        if DataIs2DPolar(data):
-            aspect = 0.5
-        else:
+        if not DataIs2DPolar(data):
             aspect = (data[x1].values.max() - data[x1].values.min()) / (
                 data[x2].values.max() - data[x2].values.min()
             )
             aspect = aspect[()]
+        else:
+            aspect = 1.5
 
         ncols = max(1, int(math.floor(nfields * 1.5 * aspect / (1 + 1.5 * aspect))))
         nrows = max(1, int(math.ceil(nfields / ncols)))
@@ -452,14 +452,27 @@ class ds_accessor:
                     kwargs[fld] = {**default_kwargs, **plot_kwargs[fld_kwargs]}
                     break
             if "norm" in kwargs[fld]:
-                kwargs[fld].pop("vmin")
-                kwargs[fld].pop("vmax")
-
-        if DataIs2DPolar(data):
-            raise NotImplementedError("Polar plots for inspect not implemented yet.")
+                vmin = kwargs[fld].pop("vmin")
+                vmax = kwargs[fld].pop("vmax")
+                norm_str: str = kwargs[fld].pop("norm")
+                if norm_str == "linear":
+                    kwargs[fld]["vmin"] = vmin
+                    kwargs[fld]["vmax"] = vmax
+                elif norm_str == "log":
+                    if vmin <= 0:
+                        vmin = 1e-3 * vmax
+                    kwargs[fld]["norm"] = mcolors.LogNorm(vmin=vmin, vmax=vmax)
+                elif norm_str == "symlog":
+                    linthresh = kwargs[fld].pop("linthresh", 1e-3 * vmax)
+                    kwargs[fld]["norm"] = mcolors.SymLogNorm(
+                        linthresh=linthresh, vmin=vmin, vmax=vmax, linscale=1
+                    )
 
         def make_plot(ax: plt.Axes, fld: str):
-            data[fld].plot(ax=ax, add_colorbar=False, **kwargs[fld])
+            if DataIs2DPolar(data):
+                data[fld].polar.pcolor(ax=ax, cbar_position=None, **kwargs[fld])
+            else:
+                data[fld].plot(ax=ax, add_colorbar=False, **kwargs[fld])
 
         def make_cbar(ax: plt.Axes, cbar: plt.Axes, fld: str):
             _ = cbar.set(xticks=[], xlabel=None, ylabel=None)
@@ -476,8 +489,8 @@ class ds_accessor:
                 vmin /= coeff
                 vmax /= coeff
             if isinstance(ax.collections[0].norm, mcolors.LogNorm):
-                _ = cbar.set(ylim=(vmin, vmax), yscale="log")
                 data_norm = mcolors.LogNorm(vmin=vmin, vmax=vmax)
+                _ = cbar.set(ylim=(vmin, vmax), yscale="log")
                 ys = np.logspace(np.log10(vmin), np.log10(vmax))
                 _ = cbar.pcolor(
                     [0, 1],
@@ -488,7 +501,42 @@ class ds_accessor:
                     norm=data_norm,
                 )
             elif isinstance(ax.collections[0].norm, mcolors.SymLogNorm):
-                raise NotImplementedError("SymLogNorm not implemented yet.")
+                data_norm = ax.collections[0].norm
+                _ = cbar.set_ylim(vmin, vmax)
+                _ = cbar.set_yscale(
+                    "symlog",
+                    linthresh=data_norm.linthresh,
+                    linscale=1,
+                )
+                ys = np.concatenate(
+                    (
+                        -np.logspace(
+                            np.log10(-vmin),
+                            np.log10(data_norm.linthresh),
+                            num=100,
+                            endpoint=False,
+                        ),
+                        np.linspace(
+                            -data_norm.linthresh,
+                            data_norm.linthresh,
+                            num=10,
+                            endpoint=False,
+                        ),
+                        np.logspace(
+                            np.log10(data_norm.linthresh),
+                            np.log10(vmax),
+                            num=100,
+                        ),
+                    )
+                )
+                _ = cbar.pcolor(
+                    [0, 1],
+                    ys,
+                    np.transpose([ys] * 2),
+                    cmap=kwargs[fld]["cmap"],
+                    rasterized=True,
+                    norm=data_norm,
+                )
             else:
                 _ = cbar.set(ylim=(vmin, vmax))
                 ys = np.linspace(vmin, vmax)
