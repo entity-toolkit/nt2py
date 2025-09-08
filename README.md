@@ -8,15 +8,14 @@ pip install nt2py
 
 ### Usage
 
-The Library works both with single-file output as well as with separate files. In either case, the location of the data is passed via `path` keyword argument.
+Simply pass the location to the data when initializing the main `Data` object:
 
 ```python
 import nt2
 
-data = nt2.Data(path="path/to/data")
+data = nt2.Data("path/to/data")
 # example: 
-#   data = nt2.Data(path="path/to/shock.h5") : for single-file
-#   data = nt2.Data(path="path/to/shock") : for multi-file
+#   data = nt2.Data("path/to/shock")
 ```
 
 The data is stored in specialized containers which can be accessed via corresponding attributes:
@@ -146,16 +145,51 @@ nt2.Dashboard()
 
 This will output the port where the dashboard server is running, e.g., `Dashboard: http://127.0.0.1:8787/status`. Click on it (or enter in your browser) to open the dashboard.
 
+### CLI
+
+Since version 1.0.0, `nt2py` also offers a command-line interface, accessed via `nt2` command. To view all the options, simply run:
+
+```sh
+nt2 --help
+```
+
+The plotting routine is pretty customizable. For instance, if the data is located in `myrun/mysimulation`, you can inspect the content of the data structure using:
+
+```sh
+nt2 show myrun/mysimulation
+```
+
+Or if you want to make a quick plot (a-la `inspect` discussed above) of the specific quantities, you may simply run:
+
+```sh
+nt2 plot myrun/mysimulation --fields "E.*;B.*" --isel "t=5" --sel "x=slice(-5, None); z=0.5"
+```
+
+This plots the 6-th snapshot (`t=5`) of all the `E` and `B` field components, sliced for `x > -5`, and at `z = 0.5` (notice, that you can use both `--isel` and `--sel`). If instead, you prefer to make a movie, simply do not specify the time:
+
+```sh
+nt2 plot myrun/mysimulation --fields "E.*;B.*" --sel "x=slice(-5, None); z=0.5"
+```
+
+> If you want to only install the CLI, without the library itself, you may do that via `pipx`: `pipx install nt2py`. 
+
 ### Features
 
 1. Lazy loading and parallel processing of the simulation data with [`dask`](https://dask.org/).
 2. Context-aware data manipulation with [`xarray`](http://xarray.pydata.org/en/stable/).
-3. Parellel plotting and movie generation with [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html) and [`ffmpeg`](https://ffmpeg.org/).
+3. Parallel plotting and movie generation with [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html) and [`ffmpeg`](https://ffmpeg.org/).
+4. Command-line interface, the `nt2` command, for quick plotting (both movies and snapshots).
+
+### Testing
+
+There are unit tests included with the code which also require downloading test data with [`git lfs`](https://git-lfs.com/) (installed separately from `git`). You may download the data simply by running `git lfs pull`.
 
 ### TODO
 
-- [ ] Unit tests
-- [ ] Plugins for other simulation data formats
+- [x] Unit tests
+- [x] Plugins for other simulation data formats
+- [ ] Support for sparse arrays for particles via `Sparse` library
+- [x] Command-line interface
 - [ ] Support for multiple runs
 - [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)
 - [x] Ghost cells support

@@ -1,4 +1,7 @@
-__version__ = "0.6.0"
+__version__ = "1.0.0"
 
-from nt2.data import Data as Data
-from nt2.dashboard import Dashboard as Dashboard
+import nt2.containers.data as nt2_data
+
+
+class Data(nt2_data.Data):
+    pass

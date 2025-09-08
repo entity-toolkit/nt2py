@@ -7,7 +7,8 @@ name = "nt2py"
 dynamic = ["version"]
 dependencies = [
   "types-setuptools",
-  "dask[distributed]",
+  "dask[complete]",
+  "adios2",
   "bokeh",
   "xarray",
   "numpy",
@@ -16,6 +17,7 @@ dependencies = [
   "matplotlib",
   "tqdm",
   "contourpy",
+  "typer",
 ]
 requires-python = ">=3.8"
 authors = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
@@ -41,6 +43,9 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/entity-toolkit/nt2py"
+
+[project.scripts]
+nt2 = "nt2.cli.main:app"
 
 [tool.hatch.version]
 path = "nt2/__init__.py"

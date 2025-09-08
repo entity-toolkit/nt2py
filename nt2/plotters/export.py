@@ -1,4 +1,13 @@
-def makeFramesAndMovie(name, plot, times, data=None, **kwargs):
+from typing import Any, Callable
+
+
+def makeFramesAndMovie(
+    name: str,
+    plot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+    times: list[float],
+    data: Any = None,
+    **kwargs: Any,
+) -> bool:
     num_cpus = kwargs.pop("num_cpus", None)
     if all(
         makeFrames(
@@ -10,7 +19,7 @@ def makeFramesAndMovie(name, plot, times, data=None, **kwargs):
         )
     ):
         print(f"Frames saved in {name}/frames")
-        output = kwargs.pop("output", f"{name}.mp4")
+        output: str = kwargs.pop("output", f"{name}.mp4")
         if makeMovie(
             input=f"{name}/frames/",
             overwrite=True,
@@ -26,7 +35,7 @@ def makeFramesAndMovie(name, plot, times, data=None, **kwargs):
         raise ValueError("Failed to make frames")
 
 
-def makeMovie(**ffmpeg_kwargs):
+def makeMovie(**ffmpeg_kwargs: str | int | float) -> bool:
     """
     Create a movie from frames using the `ffmpeg` command-line tool.
 
@@ -52,6 +61,10 @@ def makeMovie(**ffmpeg_kwargs):
     """
     import subprocess
 
+    input_pattern: str = (
+        f"{ffmpeg_kwargs.get('input', 'step_')}%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}"
+    )
+
     command = [
         ffmpeg_kwargs.get("ffmpeg", "ffmpeg"),
         "-nostdin",
@@ -60,8 +73,7 @@ def makeMovie(**ffmpeg_kwargs):
         "-start_number",
         str(ffmpeg_kwargs.get("start", 0)),
         "-i",
-        ffmpeg_kwargs.get("input", "step_")
-        + f"%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}",
+        input_pattern,
         "-c:v",
         "libx264",
         "-crf",
@@ -83,7 +95,13 @@ def makeMovie(**ffmpeg_kwargs):
         return False
 
 
-def makeFrames(plot, times, fpath, data=None, num_cpus=None):
+def makeFrames(
+    plot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+    times: list[float],
+    fpath: str,
+    data: Any = None,
+    num_cpus: int | None = None,
+) -> list[bool]:
     """
     Create plot frames from a set of timesteps of the same dataset.
 
@@ -135,7 +153,7 @@ def makeFrames(plot, times, fpath, data=None, num_cpus=None):
 
     global plotAndSave
 
-    def plotAndSave(ti, t, fpath):
+    def plotAndSave(ti: int, t: float, fpath: str) -> bool:
         try:
             if data is None:
                 plot(t)

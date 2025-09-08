@@ -1,3 +1,12 @@
 {
-  "extraPath": ["./"],
+  "extraPath": [
+    "./"
+  ],
+  "reportAny": false,
+  "reportExplicitAny": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownArgumentType": false,
+  "reportArgumentType": false,
+  "reportPrivateImportUsage": false
 }

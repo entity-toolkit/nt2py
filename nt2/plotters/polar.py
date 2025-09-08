@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Any
 
-from nt2.containers.utils import _dataIs2DPolar
+from nt2.utils import DataIs2DPolar
 
 
 def DipoleSampling(**kwargs):
@@ -53,13 +53,13 @@ def MonopoleSampling(**kwargs):
     return np.linspace(0, np.pi, nth + 2)[1:-1]
 
 
-class _datasetPolarPlotAccessor:
+class ds_accessor:
     def __init__(self, xarray_obj):
         self._obj = xarray_obj
 
     def pcolor(self, value, **kwargs):
         assert "t" not in self._obj[value].dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         self._obj[value].polar.pcolor(**kwargs)
 
     def fieldplot(
@@ -166,13 +166,11 @@ class _datasetPolarPlotAccessor:
 
         assert "t" not in self._obj[fr].dims, "Time must be specified"
         assert "t" not in self._obj[fth].dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
-
-        useGreek = "θ" in self._obj.coords.keys()
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
 
         r, th = (
             self._obj.coords["r"].values,
-            self._obj.coords["θ" if useGreek else "th"].values,
+            self._obj.coords["th"].values,
         )
         _, ths = np.meshgrid(r, th)
         fxs = self._obj[fr] * np.sin(ths) + self._obj[fth] * np.cos(ths)
@@ -212,23 +210,23 @@ class _datasetPolarPlotAccessor:
 
         def integrate(delta, counter):
             r0, th0 = copy(r_th_start)
-            XY = np.array([r0 * np.sin(th0), r0 * np.cos(th0)])
-            RTH = [r0, th0]
-            fieldline = np.array([XY])
+            xy = np.array([r0 * np.sin(th0), r0 * np.cos(th0)])
+            rth = [r0, th0]
+            fieldline = np.array([xy])
             with np.errstate(divide="ignore", invalid="ignore"):
                 while range(counter, maxsteps):
-                    x, y = XY
+                    x, y = xy
                     r = np.sqrt(x**2 + y**2)
                     th = np.arctan2(-y, x) + np.pi / 2
-                    RTH = [r, th]
+                    rth = [r, th]
                     vx = interp_fx((th, r))[()]
                     vy = interp_fy((th, r))[()]
                     vmag = np.sqrt(vx**2 + vy**2)
-                    XY = XY + delta * np.array([vx, vy]) / vmag
-                    if stop(XY, RTH) or np.isnan(XY).any() or np.isinf(XY).any():
+                    xy = xy + delta * np.array([vx, vy]) / vmag
+                    if stop(xy, rth) or np.isnan(xy).any() or np.isinf(xy).any():
                         break
                     else:
-                        fieldline = np.append(fieldline, [XY], axis=0)
+                        fieldline = np.append(fieldline, [xy], axis=0)
             return fieldline
 
         if direction == "forward":
@@ -242,11 +240,11 @@ class _datasetPolarPlotAccessor:
             return np.append(f2[::-1], f1, axis=0)
 
 
-class _polarPlotAccessor:
-    def __init__(self, xarray_obj):
+class accessor:
+    def __init__(self, xarray_obj) -> None:
         self._obj = xarray_obj
 
-    def pcolor(self, **kwargs):
+    def pcolor(self, **kwargs) -> Any:
         """
         Plots a pseudocolor plot of 2D polar data on a rectilinear projection.
 
@@ -300,8 +298,6 @@ class _polarPlotAccessor:
         import matplotlib as mpl
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-        useGreek = "θ" in self._obj.coords.keys()
-
         ax = kwargs.pop("ax", plt.gca())
         cbar_size = kwargs.pop("cbar_size", "5%")
         cbar_pad = kwargs.pop("cbar_pad", 0.05)
@@ -321,7 +317,7 @@ class _polarPlotAccessor:
 
         assert ax.name != "polar", "`ax` must be a rectilinear projection"
         assert "t" not in self._obj.dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
         if type(kwargs.get("norm", None)) is colors.LogNorm:
             cm = kwargs.get("cmap", "viridis")
@@ -332,19 +328,12 @@ class _polarPlotAccessor:
         vals = self._obj.values.flatten()
         vals = np.concatenate((vals, vals))
         if not cell_centered:
-            drs = self._obj.coords["r_2"] - self._obj.coords["r_1"]
-            dths = (
-                self._obj.coords["θ_2" if useGreek else "th_2"]
-                - self._obj.coords["θ_1" if useGreek else "th_1"]
-            )
-            r1s = self._obj.coords["r_1"] - drs * cell_size / 2
-            r2s = self._obj.coords["r_1"] + drs * cell_size / 2
-            th1s = (
-                self._obj.coords["θ_1" if useGreek else "th_1"] - dths * cell_size / 2
-            )
-            th2s = (
-                self._obj.coords["θ_1" if useGreek else "th_1"] + dths * cell_size / 2
-            )
+            drs = self._obj.coords["r_max"] - self._obj.coords["r_min"]
+            dths = self._obj.coords["th_max"] - self._obj.coords["th_min"]
+            r1s = self._obj.coords["r_min"] - drs * cell_size / 2
+            r2s = self._obj.coords["r_min"] + drs * cell_size / 2
+            th1s = self._obj.coords["th_min"] - dths * cell_size / 2
+            th2s = self._obj.coords["th_min"] + dths * cell_size / 2
             rs = np.ravel(np.column_stack((r1s, r2s)))
             ths = np.ravel(np.column_stack((th1s, th2s)))
             nr = len(rs)
@@ -358,10 +347,10 @@ class _polarPlotAccessor:
             points_4 = np.arange(nth * nr).reshape(nth, -1)[1::2, :-1:2].flatten()
 
         else:
-            rs = np.append(self._obj.coords["r_1"], self._obj.coords["r_2"][-1])
+            rs = np.append(self._obj.coords["r_min"], self._obj.coords["r_max"][-1])
             ths = np.append(
-                self._obj.coords["θ_1" if useGreek else "th_1"],
-                self._obj.coords["θ_2" if useGreek else "th_2"][-1],
+                self._obj.coords["th_min"],
+                self._obj.coords["th_max"][-1],
             )
             nr = len(rs)
             nth = len(ths)
@@ -447,8 +436,6 @@ class _polarPlotAccessor:
         import warnings
         import matplotlib.pyplot as plt
 
-        useGreek = "θ" in self._obj.coords.keys()
-
         ax = kwargs.pop("ax", plt.gca())
         title = kwargs.pop("title", None)
         invert_x = kwargs.pop("invert_x", False)
@@ -456,11 +443,9 @@ class _polarPlotAccessor:
 
         assert ax.name != "polar", "`ax` must be a rectilinear projection"
         assert "t" not in self._obj.dims, "Time must be specified"
-        assert _dataIs2DPolar(self._obj), "Data must be 2D polar"
+        assert DataIs2DPolar(self._obj), "Data must be 2D polar"
         ax.grid(False)
-        r, th = np.meshgrid(
-            self._obj.coords["r"], self._obj.coords["θ" if useGreek else "th"]
-        )
+        r, th = np.meshgrid(self._obj.coords["r"], self._obj.coords["th"])
         x, y = r * np.sin(th), r * np.cos(th)
         if invert_x:
             x = -x
