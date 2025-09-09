@@ -52,3 +52,7 @@ path = "nt2/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nt2"]
+exclude = ["/.git", "/.venv", "/dist", "/temp", "/nt2/tests/"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.git", "/.venv", "/dist", "/temp", "/nt2/tests/"]
