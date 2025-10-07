@@ -79,6 +79,12 @@ You can also create a movie of a single field quantity (can be custom):
 (data.fields.Ex * data.fields.Bx).sel(x=slice(None, 0.2)).movie.plot(name="ExBx", vmin=-0.01, vmax=0.01, cmap="BrBG")
 ```
 
+For particles, one can also make 2D phase-space plots:
+
+```python
+data.particles[1].sel(t=1.0, method="nearest").particles.phaseplot(x="x", y="uy", xnbins=100, ynbins=200, xlims=(0, 100), cmap="inferno")
+```
+
 You may also combine different quantities and plots (e.g., fields & particles) to produce a more customized movie:
 
 ```python

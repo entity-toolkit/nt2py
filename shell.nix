@@ -9,7 +9,7 @@ pkgs.mkShell {
     pkgs."python${py}"
     pkgs."python${py}Packages".pip
     black
-    basedpyright
+    pyright
     taplo
     vscode-langservers-extracted
     zlib

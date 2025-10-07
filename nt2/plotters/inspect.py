@@ -180,7 +180,7 @@ class ds_accessor:
                 )
 
             def plot_func(ti: int, _):
-                if len(self._obj.dims) == 1:
+                if len(self._obj.isel(t=ti).dims) == 1:
                     _ = self.plot_frame_1d(
                         self._obj.isel(t=ti),
                         None,
@@ -189,7 +189,7 @@ class ds_accessor:
                         fig_kwargs,
                         plot_kwargs,
                     )
-                elif len(self._obj.dims) == 2:
+                elif len(self._obj.isel(t=ti).dims) == 2:
                     _ = self.plot_frame_2d(
                         self._obj.isel(t=ti),
                         None,

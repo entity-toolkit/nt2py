@@ -1,11 +1,14 @@
 from typing import Callable, Any
 
 import sys
+
 if sys.version_info >= (3, 12):
     from typing import override
 else:
+
     def override(method):
         return method
+
 
 from collections.abc import KeysView
 from nt2.utils import ToHumanReadable
@@ -25,7 +28,7 @@ from nt2.containers.fields import Fields
 from nt2.containers.particles import Particles
 
 import nt2.plotters.polar as acc_polar
-
+import nt2.plotters.particles as acc_particles
 import nt2.plotters.inspect as acc_inspect
 import nt2.plotters.movie as acc_movie
 from nt2.plotters.export import makeFramesAndMovie
@@ -34,6 +37,12 @@ from nt2.plotters.export import makeFramesAndMovie
 @xr.register_dataset_accessor("polar")
 @InheritClassDocstring
 class DatasetPolarPlotAccessor(acc_polar.ds_accessor):
+    pass
+
+
+@xr.register_dataset_accessor("particles")
+@InheritClassDocstring
+class DatasetParticlesPlotAccessor(acc_particles.ds_accessor):
     pass
 
 

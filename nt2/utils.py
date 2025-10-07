@@ -93,9 +93,7 @@ def DataIs2DPolar(ds: xr.Dataset) -> bool:
     bool
         True if the dataset is 2D polar, False otherwise.
     """
-    return ("r" in ds.dims and ("θ" in ds.dims or "th" in ds.dims)) and len(
-        ds.dims
-    ) == 2
+    return ("r" in ds.dims and "th" in ds.dims) and len(ds.dims) == 2
 
 
 def InheritClassDocstring(cls: type) -> type:
