@@ -242,9 +242,8 @@ class Data(Fields, Particles):  # pyright: ignore[reportUnsafeMultipleInheritanc
         if time is None:
             if self.fields_defined:
                 time = self.fields.t.values
-            elif self.particles_defined:
-                species = sorted(list(self.particles.keys()))
-                time = self.particles[species[0]].t.values
+            elif self.particles_defined and self.particles is not None:
+                time = list(self.particles.times)
             else:
                 raise ValueError("No time values found.")
         assert time is not None, "Time values must be provided."
@@ -311,14 +310,13 @@ class Data(Fields, Particles):  # pyright: ignore[reportUnsafeMultipleInheritanc
             string += f"  - total size: {ToHumanReadable(self.fields.nbytes)}\n\n"
         else:
             string += "Fields: empty\n\n"
-        if self.particles_defined:
-            species = sorted(list(self.particles.keys()))
+        if self.particles_defined and self.particles is not None:
+            species = sorted(self.particles.species)
             string += "Particle species:\n"
             string += f"  - species: {compactify(species)}\n"
-            string += f"  - timesteps: {len(self.particles[species[0]].t)}\n"
-            string += f"  - quantities: {compactify(self.particles[species[0]].data_vars.keys())}\n"
-            string += f"  - max # per species: {[self.particles[sp].idx.shape[0] for sp in species]}\n"
-            string += f"  - total size: {ToHumanReadable(sum([self.particles[sp].nbytes for sp in species]))}\n\n"
+            string += f"  - timesteps: {len(self.particles.times)}\n"
+            string += f"  - quantities: {compactify(self.particles.columns)}\n"
+            string += f"  - total size: {ToHumanReadable(self.particles.nbytes)}\n\n"
         else:
             string += "Particles: empty\n\n"
 

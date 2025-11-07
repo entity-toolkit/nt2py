@@ -2,6 +2,7 @@ from enum import Enum
 import os
 import re
 import inspect
+import numpy as np
 
 import xarray as xr
 
@@ -78,7 +79,7 @@ def ToHumanReadable(num: float | int, suffix: str = "B") -> str:
         The number in human-readable format with SI prefixes.
     """
     for unit in ("", "K", "M", "G", "T", "P", "E", "Z"):
-        if abs(num) < 1e3:
+        if np.abs(num) < 1e3:
             return f"{num:3.1f} {unit}{suffix}"
         num /= 1e3
     return f"{num:.1f} Y{suffix}"

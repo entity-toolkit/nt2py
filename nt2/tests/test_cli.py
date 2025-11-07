@@ -46,6 +46,8 @@ def test_plot_png(test):
             [
                 "plot",
                 PATH,
+                "--what",
+                "fields",
                 "--sel",
                 "x=slice(None, 5);y=slice(-5.0, 5.0)",
                 "--isel",
