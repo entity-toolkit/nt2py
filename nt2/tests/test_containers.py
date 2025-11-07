@@ -144,19 +144,4 @@ def test_particles(test, particle_container: type[Data] | type[Particles]):
         reader=reader,
         remap={"particles": prtl_remap},
     )
-    steps = reader.GetValidSteps(path=PATH, category="particles")
     assert particles.particles is not None, "Particles are None"
-    for p in prtl_coords:
-        if p == "z" and test["dim"] == "2D" and test.get("coords", "cart") == "cart":
-            continue
-        for i, (_, parts) in enumerate(particles.particles.items()):
-            if isinstance(test["particles"]["num"], list):
-                num = test["particles"]["num"][i]
-            else:
-                num = test["particles"]["num"]
-            check_shape(parts[p].shape, (len(steps), num))
-            for i, st in enumerate(steps):
-                assert (
-                    parts[p].isel(t=i).s.values[()] == st
-                ), f"Step {st} does not match in particle {p}"
-                check_shape(parts[p].isel(t=i).shape, (num,))

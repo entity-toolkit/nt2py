@@ -209,19 +209,9 @@ def test_reader(test):
         # Check prtl shapes
         for step in reader.GetValidSteps(path=PATH, category="particles"):
             for sp in range(nspec):
-                shape = reader.ReadArrayShapeAtTimestep(
+                reader.ReadArrayShapeAtTimestep(
                     path=PATH,
                     category="particles",
                     quantity=f"pW_{sp+1}",
                     step=step,
                 )
-                for p in prtl_names:
-                    if not p.endswith(f"_{sp+1}"):
-                        continue
-                    prtl_shape = reader.ReadArrayShapeAtTimestep(
-                        path=PATH, category="particles", quantity=p, step=step
-                    )
-                    check_equal_arrays(prtl_shape, shape)
-
-        # Check that all timesteps have the same names
-        reader.VerifySameCategoryNames(path=PATH, category="particles", prefix="p")

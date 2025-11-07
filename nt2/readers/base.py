@@ -1,5 +1,3 @@
-# pyright: reportUnusedParameter=false
-
 from typing import Any
 import numpy.typing as npt
 import os, re, logging
