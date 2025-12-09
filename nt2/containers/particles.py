@@ -1,8 +1,6 @@
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Literal
 from copy import copy
 
-import dask
-import dask.array as da
 import dask.dataframe as dd
 from dask.delayed import delayed
 import pandas as pd
@@ -12,7 +10,6 @@ import matplotlib.pyplot as plt
 import matplotlib.axes as maxes
 
 from nt2.containers.container import BaseContainer
-from nt2.readers.base import BaseReader
 
 
 IntSelector = int | Sequence[int] | slice | Tuple[int, int]
@@ -353,7 +350,7 @@ class ParticleDataset:
         ddf = dd.from_delayed(delayed_parts, meta=meta)
         return ddf
 
-    def load(self, cols: Sequence[str] = None) -> pd.DataFrame:
+    def load(self, cols: Sequence[str] | None = None) -> pd.DataFrame:
         if cols is None:
             cols = self.columns
 
@@ -387,12 +384,38 @@ class ParticleDataset:
             .drop(columns=["row"])
         )
 
+    def help(self) -> str:
+        ret = "- use .sel(...) to select particles based on criteria:\n"
+        ret += "  t  : time (float)\n"
+        ret += "  st : step (int)\n"
+        ret += "  sp : species (int)\n"
+        ret += "  id : particle id (int)\n\n"
+        ret += "  # example:\n"
+        ret += "  #   .sel(t=slice(10.0, 20.0), sp=[1, 2, 3], id=[42, 22])\n\n"
+        ret += "- use .isel(...) to select particles based on output step:\n"
+        ret += "  t  : timestamp index (int)\n"
+        ret += "  st : step index (int)\n\n"
+        ret += "  # example:\n"
+        ret += "  #   .isel(t=-1)\n"
+        ret += "\n"
+        ret += "- .sel and .isel can be chained together:\n\n"
+        ret += "  # example:\n"
+        ret += "  #   .isel(t=-1).sel(sp=1).sel(id=[55, 66])\n\n"
+        ret += "- use .load(cols=[...]) to load data into a pandas DataFrame (`cols` defaults to all columns)\n\n"
+        ret += "  # example:\n"
+        ret += "  #  .sel(...).load()\n"
+        return ret
+
     def __repr__(self) -> str:
         ret = "ParticleDataset:\n"
+        ret += "================\n"
+        ret += f"Variables:\n  {self.columns}\n\n"
+        ret += "Current selection:\n"
         for k, v in self.selection.items():
-            ret += f"  {k}: {v}\n"
-        ret += f"  columns: {self.columns}\n"
-        ret += f"  total rows: {len(self._ddf_index)}\n"
+            ret += f"  {k:<5} : {v}\n"
+        ret += "\nHelp:\n"
+        ret += "-----\n"
+        ret += f"{self.help()}"
         return ret
 
     def __str__(self) -> str:
@@ -557,22 +580,22 @@ class Particles(BaseContainer):
         """Helper function to read all particles data."""
         valid_steps = self.nonempty_steps
 
-        quantities = self.reader.ReadCategoryNamesAtTimestep(
-            self.path, "particles", "p", valid_steps[0]
-        )
+        quantities_ = [
+            self.reader.ReadCategoryNamesAtTimestep(self.path, "particles", "p", step)
+            for step in valid_steps
+        ]
+        quantities = sorted(np.unique([q for qtys in quantities_ for q in qtys]))
+
         unique_quantities = sorted(
             list(
                 set(
-                    [
-                        q.split("_")[0]
-                        for q in quantities
-                        if not q.startswith("pIDX") and not q.startswith("pRNK")
-                    ]
+                    str(q).split("_")[0]
+                    for q in quantities
+                    if not q.startswith("pIDX") and not q.startswith("pRNK")
                 )
             )
         )
-
-        all_species = sorted(list(set([int(q.split("_")[1]) for q in quantities])))
+        all_species = sorted(list(set([int(str(q).split("_")[1]) for q in quantities])))
 
         sp_with_idx = sorted(
             [int(q.split("_")[1]) for q in quantities if q.startswith("pIDX")]
@@ -588,11 +611,14 @@ class Particles(BaseContainer):
             return name
 
         def GetCount(step: int, sp: int) -> np.int64:
-            return np.int64(
-                self.reader.ReadArrayShapeAtTimestep(
-                    self.path, "particles", f"pX1_{sp}", step
-                )[0]
-            )
+            try:
+                return np.int64(
+                    self.reader.ReadArrayShapeAtTimestep(
+                        self.path, "particles", f"pX1_{sp}", step
+                    )[0]
+                )
+            except:
+                return np.int64(0)
 
         def ReadSteps() -> np.ndarray:
             return np.array(self.reader.GetValidSteps(self.path, "particles"))
@@ -664,6 +690,14 @@ class Particles(BaseContainer):
             else:
                 read_colname = f"p{colname}"
 
+            def species_has_quantity(sp: int) -> bool:
+                return (
+                    f"{read_colname}_{sp}"
+                    in self.reader.ReadCategoryNamesAtTimestep(
+                        self.path, "particles", "p", step
+                    )
+                )
+
             def get_quantity_for_species(sp: int) -> np.ndarray:
                 if f"{read_colname}_{sp}" in quantities:
                     return self.reader.ReadArrayAtTimestep(
@@ -673,8 +707,16 @@ class Particles(BaseContainer):
                     return np.zeros(GetCount(step, sp)) * np.nan
 
             return np.concat(
-                [get_quantity_for_species(sp) for sp in sp_with_idx]
-                + [get_quantity_for_species(sp) for sp in sp_without_idx]
+                [
+                    get_quantity_for_species(sp)
+                    for sp in sp_with_idx
+                    if species_has_quantity(sp)
+                ]
+                + [
+                    get_quantity_for_species(sp)
+                    for sp in sp_without_idx
+                    if species_has_quantity(sp)
+                ]
             )
 
         return ParticleDataset(

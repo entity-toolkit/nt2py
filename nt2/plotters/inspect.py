@@ -1,5 +1,3 @@
-# pyright: reportMissingTypeStubs=false
-
 from typing import Any, Callable
 import matplotlib.pyplot as plt
 import matplotlib.figure as mfigure
@@ -15,7 +13,7 @@ class ds_accessor:
     def __axes_grid(
         self,
         grouped_fields: dict[str, list[str]],
-        makeplot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+        makeplot: Callable,
         nrows: int,
         ncols: int,
         nfields: int,
@@ -53,8 +51,8 @@ class ds_accessor:
     @staticmethod
     def _fixed_axes_grid_with_cbars(
         fields: list[str],
-        makeplot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
-        makecbar: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+        makeplot: Callable,
+        makecbar: Callable,
         nrows: int,
         ncols: int,
         nfields: int,
