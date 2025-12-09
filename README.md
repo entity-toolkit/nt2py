@@ -125,21 +125,6 @@ nt2e.makeFramesAndMovie(
 )
 ```
 
-#### Plots for debugging
-
-If the simulation also outputs the ghost cells, `nt2py` will interpret the fields differently, and instead of reading the physical coordinates, will build the coordinates based on the number of cells (including ghost cells). In particular, instead of, e.g., `data.fields.x` it will contain `data.fields.i1`. The data will also contain information about the meshblock decomposition. For instance, if you have `Nx` meshblocks in the `x` direction, each having `nx` cells, the coordinates `data.fields.i1` will go from `0` to `nx * NX + 2 * NGHOSTS * Nx`.
-
-You can overplot both the coordinate grid as well as the active zones of the meshblocks using the following:
-
-```python
-ax = plt.gca()
-data.fields.Ex.isel(t=ti).plot(ax=ax)
-data.plotGrid(ax=ax)
-data.plotDomains(ax=ax)
-```
-
-> Keep in mind, that by default `Entity` converts all quantities to tetrad basis (or contravariant in GR) and interpolates to cell centers before outputting (except for the ghost cells). So when doing plots for debugging, make sure to also set `as_is = true` (together with `ghosts = true`) in the `[output.debug]` section of the `toml` input file. This will ensure the fields are being output as is, with no conversion or interpolation. This does not apply to particle moments, which are never stored in the code and are computed only during the output.
-
 ### Dashboard
 
 Support for the dask dashboard is still in beta, but you can access it by first launching the dashboard client:
@@ -200,3 +185,4 @@ There are unit tests included with the code which also require downloading test 
 - [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)
 - [x] Ghost cells support
 - [x] Usage examples
+- [ ] Parse the log file with timings

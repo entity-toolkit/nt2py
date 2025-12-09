@@ -3,7 +3,7 @@ from typing import Any, Callable
 
 def makeFramesAndMovie(
     name: str,
-    plot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+    plot: Callable,
     times: list[float],
     data: Any = None,
     **kwargs: Any,
@@ -96,7 +96,7 @@ def makeMovie(**ffmpeg_kwargs: str | int | float) -> bool:
 
 
 def makeFrames(
-    plot: Callable,  # pyright: ignore[reportUnknownParameterType,reportMissingTypeArgument]
+    plot: Callable,
     times: list[float],
     fpath: str,
     data: Any = None,

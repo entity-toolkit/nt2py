@@ -1,13 +1,14 @@
-# pyright: reportMissingTypeStubs=false
-
 from typing import Any
 
 import sys
+
 if sys.version_info >= (3, 12):
     from typing import override
 else:
+
     def override(method):
         return method
+
 
 import re
 import os

@@ -64,7 +64,7 @@ class MoviePlotAccessor(acc_movie.accessor):
     pass
 
 
-class Data(Fields, Particles):  # pyright: ignore[reportUnsafeMultipleInheritance]
+class Data(Fields, Particles):
     """Main class to manage all the data containers.
 
     Inherits from all category-specific containers.
@@ -220,7 +220,7 @@ class Data(Fields, Particles):  # pyright: ignore[reportUnsafeMultipleInheritanc
 
     def makeMovie(
         self,
-        plot: Callable,  # pyright: ignore[reportMissingTypeArgument, reportUnknownParameterType]
+        plot: Callable,
         time: list[float] | None = None,
         num_cpus: int | None = None,
         **movie_kwargs: Any,
