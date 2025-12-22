@@ -28,6 +28,8 @@ data.spectra    # < xr.Dataset
 
 > If using Jupyter notebook, you can quickly preview the loaded metadata by simply running a cell with just `data` in it (or in regular python, by doing `print(data)`).
 
+> Note, that by default, the `hdf5` support is disabled in `nt2py` (i.e., only `ADIOS2` format is supported). To enable it, install the package as `pip install "nt2py[hdf5]"` instead of simply `pip install nt2py`.
+
 #### Examples
 
 Plot a field (in cartesian space) at a specific time (or output step):

@@ -143,6 +143,24 @@ class Reader(BaseReader):
                 )
 
     @override
+    def ReadArrayShapeExplicitlyAtTimestep(
+        self, path: str, category: str, quantity: str, step: int
+    ) -> tuple[int]:
+        with bp.FileReader(filename := self.FullPath(path, category, step)) as f:
+            if quantity in f.available_variables():
+                var = f.inquire_variable(quantity)
+                if var is not None and (read := f.read(var)) is not None:
+                    return read.shape
+                else:
+                    raise ValueError(
+                        f"{category.capitalize()} {quantity} is not a group in the {filename}"
+                    )
+            else:
+                raise ValueError(
+                    f"{category.capitalize()} {quantity} not found in the {filename}"
+                )
+
+    @override
     def ReadFieldCoordsAtTimestep(
         self, path: str, step: int
     ) -> dict[str, npt.NDArray[Any]]:

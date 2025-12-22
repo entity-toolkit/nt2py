@@ -226,6 +226,36 @@ class BaseReader:
         """
         raise NotImplementedError("ReadArrayShapeAtTimestep is not implemented")
 
+    def ReadArrayShapeExplicitlyAtTimestep(
+        self,
+        path: str,
+        category: str,
+        quantity: str,
+        step: int,
+    ) -> tuple[int]:
+        """Read the shape of an array at a given timestep, without relying on metadata.
+
+        Parameters
+        ----------
+        path : str
+            The path to the files.
+        category : str
+            The category of the files.
+        quantity : str
+            The name of the quantity to be read.
+        step : int
+            The timestep to be read.
+
+        Returns
+        -------
+        tuple[int]
+            The shape of the array at a given timestep.
+        """
+
+        raise NotImplementedError(
+            "ReadArrayShapeExplicitlyAtTimestep is not implemented"
+        )
+
     def ReadFieldCoordsAtTimestep(
         self,
         path: str,

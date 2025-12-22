@@ -26,6 +26,7 @@ from nt2.readers.hdf5 import Reader as HDF5Reader
 from nt2.readers.adios2 import Reader as BP5Reader
 from nt2.containers.fields import Fields
 from nt2.containers.particles import Particles
+from nt2.containers.spectra import Spectra
 
 import nt2.plotters.polar as acc_polar
 import nt2.plotters.particles as acc_particles
@@ -64,7 +65,7 @@ class MoviePlotAccessor(acc_movie.accessor):
     pass
 
 
-class Data(Fields, Particles):
+class Data(Fields, Particles, Spectra):
     """Main class to manage all the data containers.
 
     Inherits from all category-specific containers.
@@ -283,7 +284,7 @@ class Data(Fields, Particles):
             cntr = 0
             for l_ in lst:
                 if cntr > 5:
-                    c += "\n                "
+                    c += "\n|   "
                     cntr = 0
                 c += f"{l_}, "
                 cntr += 1
@@ -291,34 +292,67 @@ class Data(Fields, Particles):
 
         string = ""
         if self.fields_defined:
-            string += "Fields:\n"
-            string += f"  - coordinates: {self.coordinate_system.value}\n"
-            string += f"  - data axes: {compactify(self.fields.indexes.keys())}\n"
+            string += "FieldsDataset:\n"
+            string += "==============\n"
+            string += f"| Coordinates:\n|   {self.coordinate_system.value}\n|\n"
+            string += f"| Data axes:\n|   {compactify(self.fields.indexes.keys())}\n|\n"
             delta_t = (
                 self.fields.coords["t"].values[1] - self.fields.coords["t"].values[0]
             ) / (self.fields.coords["s"].values[1] - self.fields.coords["s"].values[0])
-            string += f"    - dt: {delta_t:.2e}\n"
+            string += f"|   - dt: {delta_t:.2e}\n"
             for key in self.fields.coords.keys():
                 crd = self.fields.coords[key].values
                 fmt = ""
                 if key != "s":
                     fmt = ".2f"
-                string += f"    - {key}: {crd.min():{fmt}} -> {crd.max():{fmt}} [{len(crd)}]\n"
-            string += (
-                f"  - quantities: {compactify(sorted(self.fields.data_vars.keys()))}\n"
-            )
-            string += f"  - total size: {ToHumanReadable(self.fields.nbytes)}\n\n"
+                string += f"|   - {key}: {crd.min():{fmt}} -> {crd.max():{fmt}} [{len(crd)}]\n"
+            string += "|\n"
+            string += f"| Quantities:\n|   {compactify(sorted(self.fields.data_vars.keys()))}\n|\n"
+            string += f"| Total size: {ToHumanReadable(self.fields.nbytes)}\n\n"
         else:
-            string += "Fields: empty\n\n"
+            string += "FieldsDataset:\n"
+            string += "==============\n"
+            string += "  empty\n\n"
         if self.particles_defined and self.particles is not None:
             species = sorted(self.particles.species)
-            string += "Particle species:\n"
-            string += f"  - species: {compactify(species)}\n"
-            string += f"  - timesteps: {len(self.particles.times)}\n"
-            string += f"  - quantities: {compactify(self.particles.columns)}\n"
-            string += f"  - total size: {ToHumanReadable(self.particles.nbytes)}\n\n"
+            string += "ParticleDataset:\n"
+            string += "================\n"
+            string += f"| Species:\n|   {compactify(species)}\n|\n"
+            string += f"| Timesteps:\n|   {len(self.particles.times)}\n|\n"
+            string += f"| Quantities:\n|   {compactify(self.particles.columns)}\n|\n"
+            string += f"| Total size: {ToHumanReadable(self.particles.nbytes)}\n|\n"
+            string += self.help_particles("| ")
+            string += "\n"
         else:
-            string += "Particles: empty\n\n"
+            string += "ParticleDataset:\n"
+            string += "================\n"
+            string += "  empty\n\n"
+        if self.spectra_defined and self.spectra is not None:
+            string += "SpectraDataset:\n"
+            string += "===============\n"
+            string += (
+                f"| Data axes:\n|   {compactify(self.spectra.indexes.keys())}\n|\n"
+            )
+            delta_t = (
+                self.spectra.coords["t"].values[1] - self.spectra.coords["t"].values[0]
+            ) / (
+                self.spectra.coords["s"].values[1] - self.spectra.coords["s"].values[0]
+            )
+            string += f"|   - dt: {delta_t:.2e}\n"
+            for key in self.spectra.coords.keys():
+                crd = self.spectra.coords[key].values
+                fmt = ""
+                if key != "s":
+                    fmt = ".2f"
+                string += f"|   - {key}: {crd.min():{fmt}} -> {crd.max():{fmt}} [{len(crd)}]\n"
+            string += "|\n"
+            string += f"| Quantities:\n|   {compactify(sorted(self.spectra.data_vars.keys()))}\n|\n"
+            string += f"| Total size: {ToHumanReadable(self.spectra.nbytes)}\n|\n"
+            string += self.help_spectra("| ")
+        else:
+            string += "SpectraDataset:\n"
+            string += "===============\n"
+            string += "  empty\n\n"
 
         return string
 

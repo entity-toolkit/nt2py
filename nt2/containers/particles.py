@@ -384,26 +384,26 @@ class ParticleDataset:
             .drop(columns=["row"])
         )
 
-    def help(self) -> str:
-        ret = "- use .sel(...) to select particles based on criteria:\n"
-        ret += "  t  : time (float)\n"
-        ret += "  st : step (int)\n"
-        ret += "  sp : species (int)\n"
-        ret += "  id : particle id (int)\n\n"
-        ret += "  # example:\n"
-        ret += "  #   .sel(t=slice(10.0, 20.0), sp=[1, 2, 3], id=[42, 22])\n\n"
-        ret += "- use .isel(...) to select particles based on output step:\n"
-        ret += "  t  : timestamp index (int)\n"
-        ret += "  st : step index (int)\n\n"
-        ret += "  # example:\n"
-        ret += "  #   .isel(t=-1)\n"
-        ret += "\n"
-        ret += "- .sel and .isel can be chained together:\n\n"
-        ret += "  # example:\n"
-        ret += "  #   .isel(t=-1).sel(sp=1).sel(id=[55, 66])\n\n"
-        ret += "- use .load(cols=[...]) to load data into a pandas DataFrame (`cols` defaults to all columns)\n\n"
-        ret += "  # example:\n"
-        ret += "  #  .sel(...).load()\n"
+    def help(self, prepend="") -> str:
+        ret = f"{prepend}- use .sel(...) to select particles based on criteria:\n"
+        ret += f"{prepend}  t  : time (float)\n"
+        ret += f"{prepend}  st : step (int)\n"
+        ret += f"{prepend}  sp : species (int)\n"
+        ret += f"{prepend}  id : particle id (int)\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #   .sel(t=slice(10.0, 20.0), sp=[1, 2, 3], id=[42, 22])\n{prepend}\n"
+        ret += f"{prepend}- use .isel(...) to select particles based on output step:\n"
+        ret += f"{prepend}  t  : timestamp index (int)\n"
+        ret += f"{prepend}  st : step index (int)\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #   .isel(t=-1)\n"
+        ret += f"{prepend}\n"
+        ret += f"{prepend}- .sel and .isel can be chained together:\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #   .isel(t=-1).sel(sp=1).sel(id=[55, 66])\n{prepend}\n"
+        ret += f"{prepend}- use .load(cols=[...]) to load data into a pandas DataFrame (`cols` defaults to all columns)\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #  .sel(...).load()\n"
         return ret
 
     def __repr__(self) -> str:
@@ -726,3 +726,6 @@ class Particles(BaseContainer):
             read_colnames=ReadColnames,
             read_column=ReadColumn,
         )
+
+    def help_particles(self, prepend="") -> str:
+        return self.particles.help(prepend) if self.particles is not None else ""
