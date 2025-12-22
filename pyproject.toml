@@ -13,7 +13,6 @@ dependencies = [
   "xarray",
   "numpy",
   "scipy",
-  "h5py",
   "matplotlib",
   "tqdm",
   "contourpy",
@@ -40,6 +39,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
 ]
+
+[project.optional-dependencies]
+hdf5 = ["h5py"]
 
 [project.urls]
 Repository = "https://github.com/entity-toolkit/nt2py"

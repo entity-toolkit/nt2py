@@ -1,6 +1,6 @@
 {
   pkgs ? import <nixpkgs> { },
-  py ? "312",
+  py ? "313",
 }:
 
 pkgs.mkShell {
