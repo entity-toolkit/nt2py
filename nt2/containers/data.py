@@ -10,7 +10,6 @@ else:
         return method
 
 
-from collections.abc import KeysView
 from nt2.utils import ToHumanReadable
 
 import xarray as xr
@@ -131,7 +130,7 @@ def remap_prtl_quantities_sph(name: str) -> str:
     }.get(shortname, shortname)
 
 
-def compactify(lst: Union[List[Any], KeysView[Any]]) -> str:
+def compactify(lst: Union[List[Any], Any]) -> str:
     c = ""
     cntr = 0
     for l_ in lst:
