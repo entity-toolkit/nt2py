@@ -1,8 +1,9 @@
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Literal
+import numpy.typing as npt
 from copy import copy
 
+import dask
 import dask.dataframe as dd
-from dask.delayed import delayed
 import pandas as pd
 import numpy as np
 
@@ -149,23 +150,50 @@ def _coerce_selector_to_mask(
             return np.abs(series - s) == np.abs(series - s).min(), ("value", s)
 
 
+def _attach_columns(
+    part: pd.DataFrame,
+    cols_tuple,
+    read_column,
+    metadtypes,
+) -> pd.DataFrame:
+    if len(part) == 0:
+        for c in cols_tuple:
+            part[c] = np.array([], dtype=metadtypes[c])
+        return part
+    st_val = int(part["st"].iloc[0])
+
+    arrays = {c: read_column(st_val, c) for c in cols_tuple}
+
+    sel = part["row"].to_numpy()
+    for c in cols_tuple:
+        part[c] = np.asarray(arrays[c])[sel]
+    return part
+
+
 class ParticleDataset:
+    steps: npt.NDArray[np.int64]
+    times: npt.NDArray[np.float64]
+    colnames: List[str]
+
     def __init__(
         self,
         species: List[int],
-        read_steps: Callable[[], np.ndarray],
-        read_times: Callable[[], np.ndarray],
-        read_column: Callable[[int, str], np.ndarray],
-        read_colnames: Callable[[int], List[str]],
+        steps: npt.NDArray[np.int64],
+        times: npt.NDArray[np.float64],
+        colnames: List[str],
+        read_column: Callable[
+            [int, str], npt.NDArray[np.float64 | np.int64 | np.float32 | np.int32]
+        ],
         fprec: Optional[type] = np.float32,
         selection: Optional[dict[str, Selection]] = None,
-        ddf_index: dd.DataFrame | None = None,
+        ddf_index: Optional[dd.DataFrame] = None,
     ):
         self.species = species
-        self.read_steps = read_steps
-        self.read_times = read_times
+        self.steps = steps
+        self.times = times
+        self.colnames = colnames
+
         self.read_column = read_column
-        self.read_colnames = read_colnames
         self.fprec = fprec
         self.index_cols = ("id", "sp")
         self._all_columns_cache: Optional[List[str]] = None
@@ -180,9 +208,6 @@ class ParticleDataset:
                 "id": Selection("range"),
             }
 
-        self.steps = read_steps()
-        self.times = read_times()
-
         self._dtypes = {
             "id": np.int64,
             "sp": np.int32,
@@ -195,6 +220,12 @@ class ParticleDataset:
             "ux": fprec,
             "uy": fprec,
             "uz": fprec,
+            "r": fprec,
+            "th": fprec,
+            "ph": fprec,
+            "ur": fprec,
+            "uth": fprec,
+            "uph": fprec,
         }
 
         if ddf_index is not None:
@@ -213,7 +244,7 @@ class ParticleDataset:
     @property
     def columns(self) -> List[str]:
         if self._all_columns_cache is None:
-            self._all_columns_cache = self.read_colnames(self.steps[0])
+            self._all_columns_cache = self.colnames
         return self._all_columns_cache
 
     def sel(
@@ -261,10 +292,10 @@ class ParticleDataset:
 
         return ParticleDataset(
             species=self.species,
-            read_steps=self.read_steps,
-            read_times=self.read_times,
+            steps=self.steps,
+            times=self.times,
+            colnames=self.colnames,
             read_column=self.read_column,
-            read_colnames=self.read_colnames,
             fprec=self.fprec,
             selection=new_selection,
             ddf_index=ddf,
@@ -311,27 +342,27 @@ class ParticleDataset:
                     )
         return ParticleDataset(
             species=self.species,
-            read_steps=self.read_steps,
-            read_times=self.read_times,
+            steps=self.steps,
+            times=self.times,
+            colnames=self.colnames,
             read_column=self.read_column,
-            read_colnames=self.read_colnames,
             fprec=self.fprec,
             selection=new_selection,
             ddf_index=ddf,
         )
 
-    def _build_index_ddf(self) -> dd.DataFrame:
-        def _load_index_partition(st: int, t: float, index_cols: Tuple[str, ...]):
-            cols = {c: self.read_column(st, c) for c in index_cols}
-            n = len(next(iter(cols.values())))
-            df = pd.DataFrame(cols)
-            df["st"] = np.asarray(st, dtype=np.int64)
-            df["t"] = np.asarray(t, dtype=float)
-            df["row"] = np.arange(n, dtype=np.int64)
-            return df
+    def _load_index_partition(self, st: int, t: float, index_cols: Tuple[str, ...]):
+        cols = {c: self.read_column(st, c) for c in index_cols}
+        n = len(next(iter(cols.values())))
+        df = pd.DataFrame(cols)
+        df["st"] = np.asarray(st, dtype=np.int64)
+        df["t"] = np.asarray(t, dtype=float)
+        df["row"] = np.arange(n, dtype=np.int64)
+        return df
 
+    def _build_index_ddf(self) -> dd.DataFrame:
         delayed_parts = [
-            delayed(_load_index_partition)(st, t, self.index_cols)
+            dask.delayed(self._load_index_partition)(st, t, self.index_cols)
             for st, t in zip(self.steps, self.times)
         ]
 
@@ -361,25 +392,16 @@ class ParticleDataset:
         }
         meta = self._ddf_index._meta.assign(**meta_dict)
 
-        read_column = self.read_column
         cols_tuple = tuple(cols)
 
-        def _attach_columns(part: pd.DataFrame) -> pd.DataFrame:
-            if len(part) == 0:
-                for c in cols_tuple:
-                    part[c] = np.array([], dtype=meta.dtypes[c])
-                return part
-            st_val = int(part["st"].iloc[0])
-
-            arrays = {c: read_column(st_val, c) for c in cols_tuple}
-
-            sel = part["row"].to_numpy()
-            for c in cols_tuple:
-                part[c] = np.asarray(arrays[c])[sel]
-            return part
-
         return (
-            self._ddf_index.map_partitions(_attach_columns, meta=meta)
+            self._ddf_index.map_partitions(
+                _attach_columns,
+                cols_tuple=cols_tuple,
+                read_column=self.read_column,
+                metadtypes=meta.dtypes,
+                meta=meta,
+            )
             .compute()
             .drop(columns=["row"])
         )
@@ -515,6 +537,12 @@ class ParticleDataset:
 class Particles(BaseContainer):
     """Parent class to manage the particles dataframe."""
 
+    __particles_defined: bool
+    __particles: Optional[ParticleDataset]
+    quantities: List[str]
+    sp_with_idx: List[int]
+    sp_without_idx: List[int]
+
     def __init__(self, **kwargs: Any) -> None:
         """Initializer for the Particles class.
 
@@ -530,7 +558,55 @@ class Particles(BaseContainer):
             and self.particles_present
         ):
             self.__particles_defined = True
-            self.__particles = self.__read_particles()
+
+            valid_steps = self.nonempty_steps
+            quantities_ = [
+                self.reader.ReadCategoryNamesAtTimestep(
+                    self.path, "particles", "p", step
+                )
+                for step in valid_steps
+            ]
+            self.quantities = sorted(
+                np.unique([q for qtys in quantities_ for q in qtys])
+            )
+
+            unique_quantities = sorted(
+                list(
+                    set(
+                        str(q).split("_")[0]
+                        for q in self.quantities
+                        if not q.startswith("pIDX") and not q.startswith("pRNK")
+                    )
+                )
+            )
+            all_species = sorted(
+                list(set([int(str(q).split("_")[1]) for q in self.quantities]))
+            )
+
+            self.sp_with_idx = sorted(
+                [int(q.split("_")[1]) for q in self.quantities if q.startswith("pIDX")]
+            )
+            self.sp_without_idx = sorted(
+                [sp for sp in all_species if sp not in self.sp_with_idx]
+            )
+
+            self.__particles = ParticleDataset(
+                species=all_species,
+                steps=np.array(self.reader.GetValidSteps(self.path, "particles")),
+                times=self.reader.ReadPerTimestepVariable(
+                    self.path, "particles", "Time", "t"
+                )["t"],
+                colnames=[
+                    (
+                        self.remap["particles"](q)
+                        if (self.remap is not None and "particles" in self.remap)
+                        else q
+                    )
+                    for q in unique_quantities
+                ]
+                + ["id", "sp"],
+                read_column=self._read_column,
+            )
         else:
             self.__particles_defined = False
             self.__particles = None
@@ -576,156 +652,110 @@ class Particles(BaseContainer):
         """
         return self.__particles
 
-    def __read_particles(self) -> ParticleDataset:
-        """Helper function to read all particles data."""
-        valid_steps = self.nonempty_steps
+    def help_particles(self, prepend: str = "") -> str:
+        return self.particles.help(prepend) if self.particles is not None else ""
 
-        quantities_ = [
-            self.reader.ReadCategoryNamesAtTimestep(self.path, "particles", "p", step)
-            for step in valid_steps
-        ]
-        quantities = sorted(np.unique([q for qtys in quantities_ for q in qtys]))
-
-        unique_quantities = sorted(
-            list(
-                set(
-                    str(q).split("_")[0]
-                    for q in quantities
-                    if not q.startswith("pIDX") and not q.startswith("pRNK")
-                )
+    def _get_count(self, step: int, sp: int) -> np.int64:
+        try:
+            return np.int64(
+                self.reader.ReadArrayShapeAtTimestep(
+                    self.path, "particles", f"pX1_{sp}", step
+                )[0]
             )
+        except:
+            return np.int64(0)
+
+    def _species_has_quantity(self, read_colname: str, step: int, sp: int) -> bool:
+        return f"{read_colname}_{sp}" in self.reader.ReadCategoryNamesAtTimestep(
+            self.path, "particles", "p", step
         )
-        all_species = sorted(list(set([int(str(q).split("_")[1]) for q in quantities])))
 
-        sp_with_idx = sorted(
-            [int(q.split("_")[1]) for q in quantities if q.startswith("pIDX")]
-        )
-        sp_without_idx = sorted([sp for sp in all_species if sp not in sp_with_idx])
+    def _get_quantity_for_species(
+        self,
+        read_colname: str,
+        step: int,
+        sp: int,
+    ) -> npt.NDArray[np.float64 | np.int64]:
+        if f"{read_colname}_{sp}" in self.quantities:
+            return self.reader.ReadArrayAtTimestep(
+                self.path, "particles", f"{read_colname}_{sp}", step
+            )
+        else:
+            return np.zeros(self._get_count(step, sp)) * np.nan
 
-        def remap_quantity(name: str) -> str:
-            """
-            Remaps the particle quantity name if remap is provided
-            """
-            if self.remap is not None and "particles" in self.remap:
-                return self.remap["particles"](name)
-            return name
-
-        def GetCount(step: int, sp: int) -> np.int64:
-            try:
-                return np.int64(
-                    self.reader.ReadArrayShapeAtTimestep(
-                        self.path, "particles", f"pX1_{sp}", step
-                    )[0]
-                )
-            except:
-                return np.int64(0)
-
-        def ReadSteps() -> np.ndarray:
-            return np.array(self.reader.GetValidSteps(self.path, "particles"))
-
-        def ReadTimes() -> np.ndarray:
-            return self.reader.ReadPerTimestepVariable(
-                self.path, "particles", "Time", "t"
-            )["t"]
-
-        def ReadColnames(step: int) -> list[str]:
-            return [remap_quantity(q) for q in unique_quantities] + ["id", "sp"]
-
-        def ReadColumn(step: int, colname: str) -> np.ndarray:
-            read_colname = None
-            if colname == "id":
-                idx = np.concat(
-                    [
-                        self.reader.ReadArrayAtTimestep(
-                            self.path, "particles", f"pIDX_{sp}", step
-                        ).astype(np.int64)
-                        for sp in sp_with_idx
-                    ]
-                    + [
-                        np.zeros(GetCount(step, sp), dtype=np.int64) - 100
-                        for sp in sp_without_idx
-                    ]
-                )
-                if len(sp_with_idx) > 0 and f"pRNK_{sp_with_idx[0]}" in quantities:
-                    rnk = np.concat(
-                        [
-                            self.reader.ReadArrayAtTimestep(
-                                self.path, "particles", f"pRNK_{sp}", step
-                            ).astype(np.int64)
-                            for sp in sp_with_idx
-                        ]
-                        + [
-                            np.zeros(GetCount(step, sp), dtype=np.int64) - 100
-                            for sp in sp_without_idx
-                        ]
-                    )
-                    return (idx + rnk) * (idx + rnk + 1) // 2 + rnk
-                else:
-                    return idx
-            elif colname == "x" or colname == "r":
-                read_colname = "pX1"
-            elif colname == "y" or colname == "th":
-                read_colname = "pX2"
-            elif colname == "z" or colname == "ph":
-                read_colname = "pX3"
-            elif colname == "ux" or colname == "ur":
-                read_colname = "pU1"
-            elif colname == "uy" or colname == "uth":
-                read_colname = "pU2"
-            elif colname == "uz" or colname == "uph":
-                read_colname = "pU3"
-            elif colname == "w":
-                read_colname = "pW"
-            elif colname == "sp":
-                return np.concat(
-                    [
-                        np.zeros(GetCount(step, sp), dtype=np.int32) + sp
-                        for sp in sp_with_idx
-                    ]
-                    + [
-                        np.zeros(GetCount(step, sp), dtype=np.int32) + sp
-                        for sp in sp_without_idx
-                    ]
-                )
-            else:
-                read_colname = f"p{colname}"
-
-            def species_has_quantity(sp: int) -> bool:
-                return (
-                    f"{read_colname}_{sp}"
-                    in self.reader.ReadCategoryNamesAtTimestep(
-                        self.path, "particles", "p", step
-                    )
-                )
-
-            def get_quantity_for_species(sp: int) -> np.ndarray:
-                if f"{read_colname}_{sp}" in quantities:
-                    return self.reader.ReadArrayAtTimestep(
-                        self.path, "particles", f"{read_colname}_{sp}", step
-                    )
-                else:
-                    return np.zeros(GetCount(step, sp)) * np.nan
-
-            return np.concat(
+    def _read_column(
+        self, step: int, colname: str
+    ) -> npt.NDArray[np.float64 | np.int64 | np.float32 | np.int32]:
+        read_colname = None
+        if colname == "id":
+            idx = np.concat(
                 [
-                    get_quantity_for_species(sp)
-                    for sp in sp_with_idx
-                    if species_has_quantity(sp)
+                    self.reader.ReadArrayAtTimestep(
+                        self.path, "particles", f"pIDX_{sp}", step
+                    ).astype(np.int64)
+                    for sp in self.sp_with_idx
                 ]
                 + [
-                    get_quantity_for_species(sp)
-                    for sp in sp_without_idx
-                    if species_has_quantity(sp)
+                    np.zeros(self._get_count(step, sp), dtype=np.int64) - 100
+                    for sp in self.sp_without_idx
                 ]
             )
+            if (
+                len(self.sp_with_idx) > 0
+                and f"pRNK_{self.sp_with_idx[0]}" in self.quantities
+            ):
+                rnk = np.concat(
+                    [
+                        self.reader.ReadArrayAtTimestep(
+                            self.path, "particles", f"pRNK_{sp}", step
+                        ).astype(np.int64)
+                        for sp in self.sp_with_idx
+                    ]
+                    + [
+                        np.zeros(self._get_count(step, sp), dtype=np.int64) - 100
+                        for sp in self.sp_without_idx
+                    ]
+                )
+                return (idx + rnk) * (idx + rnk + 1) // 2 + rnk
+            else:
+                return idx
+        elif colname == "x" or colname == "r":
+            read_colname = "pX1"
+        elif colname == "y" or colname == "th":
+            read_colname = "pX2"
+        elif colname == "z" or colname == "ph":
+            read_colname = "pX3"
+        elif colname == "ux" or colname == "ur":
+            read_colname = "pU1"
+        elif colname == "uy" or colname == "uth":
+            read_colname = "pU2"
+        elif colname == "uz" or colname == "uph":
+            read_colname = "pU3"
+        elif colname == "w":
+            read_colname = "pW"
+        elif colname == "sp":
+            return np.concat(
+                [
+                    np.zeros(self._get_count(step, sp), dtype=np.int32) + sp
+                    for sp in self.sp_with_idx
+                ]
+                + [
+                    np.zeros(self._get_count(step, sp), dtype=np.int32) + sp
+                    for sp in self.sp_without_idx
+                ]
+            )
+        else:
+            read_colname = f"p{colname}"
 
-        return ParticleDataset(
-            species=all_species,
-            read_steps=ReadSteps,
-            read_times=ReadTimes,
-            read_colnames=ReadColnames,
-            read_column=ReadColumn,
+        return np.concat(
+            [
+                self._get_quantity_for_species(read_colname, step, sp)
+                for sp in self.sp_with_idx
+                if self._species_has_quantity(read_colname, step, sp)
+            ]
+            + [
+                self._get_quantity_for_species(read_colname, step, sp)
+                for sp in self.sp_without_idx
+                if self._species_has_quantity(read_colname, step, sp)
+            ]
         )
-
-    def help_particles(self, prepend="") -> str:
-        return self.particles.help(prepend) if self.particles is not None else ""

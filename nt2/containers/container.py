@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 
 from nt2.readers.base import BaseReader
 
@@ -6,11 +6,15 @@ from nt2.readers.base import BaseReader
 class BaseContainer:
     """Parent container class for holding any category data."""
 
+    __path: str
+    __reader: BaseReader
+    __remap: Optional[dict[str, Callable[[str], str]]]
+
     def __init__(
         self,
         path: str,
         reader: BaseReader,
-        remap: dict[str, Callable[[str], str]] | None = None,
+        remap: Optional[dict[str, Callable[[str], str]]] = None,
     ):
         """Initializer for the BaseContainer class.
 
@@ -20,7 +24,7 @@ class BaseContainer:
             The path to the data.
         reader : BaseReader
             The reader to be used for reading the data.
-        remap : dict[str, Callable[[str], str]] | None
+        remap : Optional[dict[str, Callable[[str], str]]]
             Remap dictionary to use to remap the data names (coords, fields, etc.).
 
         """
@@ -40,6 +44,6 @@ class BaseContainer:
         return self.__reader
 
     @property
-    def remap(self) -> dict[str, Callable[[str], str]] | None:
-        """dict[str, Callable[[str], str]]: The coordinate/field remap dictionary."""
+    def remap(self) -> Optional[dict[str, Callable[[str], str]]]:
+        """{ str: (str) -> str } : The coordinate/field remap dictionary."""
         return self.__remap

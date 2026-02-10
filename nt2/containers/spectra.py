@@ -13,8 +13,7 @@ class Spectra(BaseContainer):
     """Parent class to manager the spectra dataframe."""
 
     @staticmethod
-    @dask.delayed
-    def __read_spectrum(path: str, reader: BaseReader, spectrum: str, step: int) -> Any:
+    def read_spectrum(path: str, reader: BaseReader, spectrum: str, step: int) -> Any:
         """Reads a spectrum from the data.
 
         This is a dask-delayed function used further to build the dataset.
@@ -95,7 +94,7 @@ class Spectra(BaseContainer):
                     da.stack(
                         [
                             da.from_delayed(
-                                self.__read_spectrum(
+                                dask.delayed(self.read_spectrum)(
                                     path=self.path,
                                     reader=self.reader,
                                     spectrum=spectrum,

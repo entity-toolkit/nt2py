@@ -65,6 +65,84 @@ class MoviePlotAccessor(acc_movie.accessor):
     pass
 
 
+# Cartesian remapping functions
+def remap_fields_cart(name: str) -> str:
+    name = name[1:]
+    fieldname = name.split("_")[0]
+    fieldname = fieldname.replace("0", "t")
+    fieldname = fieldname.replace("1", "x")
+    fieldname = fieldname.replace("2", "y")
+    fieldname = fieldname.replace("3", "z")
+    suffix = "_".join(name.split("_")[1:])
+    return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
+
+
+def remap_coords_cart(name: str) -> str:
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+    }.get(name, name)
+
+
+def remap_prtl_quantities_cart(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+        "U1": "ux",
+        "U2": "uy",
+        "U3": "uz",
+        "W": "w",
+    }.get(shortname, shortname)
+
+
+# Spherical remapping functions
+def remap_fields_sph(name: str) -> str:
+    name = name[1:]
+    fieldname = name.split("_")[0]
+    fieldname = fieldname.replace("0", "t")
+    fieldname = fieldname.replace("1", "r")
+    fieldname = fieldname.replace("2", "th")
+    fieldname = fieldname.replace("3", "ph")
+    suffix = "_".join(name.split("_")[1:])
+    return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
+
+
+def remap_coords_sph(name: str) -> str:
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+    }.get(name, name)
+
+
+def remap_prtl_quantities_sph(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+        "U1": "ur",
+        "U2": "uth",
+        "U3": "uph",
+        "W": "w",
+    }.get(shortname, shortname)
+
+
+def compactify(lst: list[Any] | KeysView[Any]) -> str:
+    c = ""
+    cntr = 0
+    for l_ in lst:
+        if cntr > 5:
+            c += "\n|   "
+            cntr = 0
+        c += f"{l_}, "
+        cntr += 1
+    return c[:-2]
+
+
 class Data(Fields, Particles, Spectra):
     """Main class to manage all the data containers.
 
@@ -135,69 +213,8 @@ class Data(Fields, Particles, Spectra):
                     )
                 else:
                     if attrs["Coordinates"] in [b"cart", "cart"]:
-
-                        def remap_fields(name: str) -> str:
-                            name = name[1:]
-                            fieldname = name.split("_")[0]
-                            fieldname = fieldname.replace("0", "t")
-                            fieldname = fieldname.replace("1", "x")
-                            fieldname = fieldname.replace("2", "y")
-                            fieldname = fieldname.replace("3", "z")
-                            suffix = "_".join(name.split("_")[1:])
-                            return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
-
-                        def remap_coords(name: str) -> str:
-                            return {
-                                "X1": "x",
-                                "X2": "y",
-                                "X3": "z",
-                            }.get(name, name)
-
-                        def remap_prtl_quantities(name: str) -> str:
-                            shortname = name[1:]
-                            return {
-                                "X1": "x",
-                                "X2": "y",
-                                "X3": "z",
-                                "U1": "ux",
-                                "U2": "uy",
-                                "U3": "uz",
-                                "W": "w",
-                            }.get(shortname, shortname)
-
                         coord_system = CoordinateSystem.XYZ
-
                     elif attrs["Coordinates"] in [b"sph", "sph", b"qsph", "qsph"]:
-
-                        def remap_fields(name: str) -> str:
-                            name = name[1:]
-                            fieldname = name.split("_")[0]
-                            fieldname = fieldname.replace("0", "t")
-                            fieldname = fieldname.replace("1", "r")
-                            fieldname = fieldname.replace("2", "th")
-                            fieldname = fieldname.replace("3", "ph")
-                            suffix = "_".join(name.split("_")[1:])
-                            return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
-
-                        def remap_coords(name: str) -> str:
-                            return {
-                                "X1": "r",
-                                "X2": "th",
-                                "X3": "ph",
-                            }.get(name, name)
-
-                        def remap_prtl_quantities(name: str) -> str:
-                            shortname = name[1:]
-                            return {
-                                "X1": "r",
-                                "X2": "th",
-                                "X3": "ph",
-                                "U1": "ur",
-                                "U2": "uth",
-                                "U3": "uph",
-                                "W": "w",
-                            }.get(shortname, shortname)
-
                         coord_system = CoordinateSystem.SPH
 
                     else:
@@ -206,9 +223,21 @@ class Data(Fields, Particles, Spectra):
                         )
                     if remap is None:
                         remap = {
-                            "coords": remap_coords,
-                            "fields": remap_fields,
-                            "particles": remap_prtl_quantities,
+                            "coords": (
+                                remap_coords_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_coords_sph
+                            ),
+                            "fields": (
+                                remap_fields_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_fields_sph
+                            ),
+                            "particles": (
+                                remap_prtl_quantities_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_prtl_quantities_sph
+                            ),
                         }
                     break
 
@@ -278,17 +307,6 @@ class Data(Fields, Particles, Spectra):
 
     def to_str(self) -> str:
         """str: String representation of the all the enclosed dataframes."""
-
-        def compactify(lst: list[Any] | KeysView[Any]) -> str:
-            c = ""
-            cntr = 0
-            for l_ in lst:
-                if cntr > 5:
-                    c += "\n|   "
-                    cntr = 0
-                c += f"{l_}, "
-                cntr += 1
-            return c[:-2]
 
         string = ""
         if self.fields_defined:

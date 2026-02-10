@@ -1,4 +1,5 @@
 from typing import Any, Callable
+import matplotlib.pyplot as plt
 
 
 def makeFramesAndMovie(
@@ -95,6 +96,20 @@ def makeMovie(**ffmpeg_kwargs: str | int | float) -> bool:
         return False
 
 
+def _plot_and_save(ti: int, t: float, fpath: str, plot: Callable, data: Any) -> bool:
+    try:
+        if data is None:
+            plot(t)
+        else:
+            plot(t, data)
+        plt.savefig(f"{fpath}/{ti:05d}.png")
+        plt.close()
+        return True
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
 def makeFrames(
     plot: Callable,
     times: list[float],
@@ -145,36 +160,57 @@ def makeFrames(
     >>> makeFrames(plot_func, range(100), 'output/', num_cpus=16)
 
     """
-
-    from tqdm import tqdm
-    import multiprocessing as mp
-    import matplotlib.pyplot as plt
+    from loky import get_reusable_executor
     import os
 
-    global plotAndSave
+    ex = get_reusable_executor(max_workers=num_cpus or (os.cpu_count() or 1))
+    return [
+        f.result()
+        for f in [
+            ex.submit(_plot_and_save, ti, t, fpath, plot, data)
+            for ti, t in enumerate(times)
+        ]
+    ]
 
-    def plotAndSave(ti: int, t: float, fpath: str) -> bool:
-        try:
-            if data is None:
-                plot(t)
-            else:
-                plot(t, data)
-            plt.savefig(f"{fpath}/{ti:05d}.png")
-            plt.close()
-            return True
-        except Exception as e:
-            print(f"Error: {e}")
-            return False
+    # from tqdm import tqdm
+    # import multiprocessing as mp
+    # import os
+    #
+    # ctx = mp.get_context()
+    # if num_cpus is None:
+    #     num_cpus = os.cpu_count() or 1
+    #
+    # tasks = [(ti, t, fpath, plot, data) for ti, t in enumerate(times)]
+    #
+    # pool = mp.Pool(num_cpus)
+    #
+    # with ctx.Pool(processes=num_cpus) as pool:
+    #     results = pool.starmap_async(_plot_and_save, tasks)
+    #     out = results.get()
+    #
+    # return list(tqdm(out))
 
-    if num_cpus is None:
-        num_cpus = mp.cpu_count()
-
-    pool = mp.Pool(num_cpus)
+    # global plotAndSave
+    #
+    # def plotAndSave(ti: int, t: float) -> bool:
+    #     import matplotlib.pyplot as plt
+    #
+    #     try:
+    #         if data is None:
+    #             plot(t)
+    #         else:
+    #             plot(t, data)
+    #         plt.savefig(f"{fpath}/{ti:05d}.png")
+    #         plt.close()
+    #         return True
+    #     except Exception as e:
+    #         print(f"Error: {e}")
+    #         return False
 
     # if fpath doesn't exist, create it
-    if not os.path.exists(fpath):
-        os.makedirs(fpath)
-
-    tasks = [[ti, t, fpath] for ti, t in enumerate(times)]
-    results = [pool.apply_async(plotAndSave, t) for t in tasks]
-    return [result.get() for result in tqdm(results)]
+    # if not os.path.exists(fpath):
+    #     os.makedirs(fpath)
+    #
+    # tasks = [(ti, t) for ti, t in enumerate(times)]
+    # results = [pool.apply_async(plotAndSave, t) for t in tasks]
+    # return [result.get() for result in tqdm(results)]
