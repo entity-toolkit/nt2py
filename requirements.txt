@@ -74,7 +74,6 @@ nbclient==0.10.2
 nbconvert==7.16.6
 nbformat==5.10.4
 nest-asyncio==1.6.0
--e git+ssh://git@github.com/entity-toolkit/nt2py.git@5021e028931ac5d0b0a417fc52a5c241e73c87e1#egg=nt2py
 numpy==2.3.1
 overrides==7.7.0
 packaging==25.0
