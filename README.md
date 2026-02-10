@@ -1,4 +1,4 @@
-## nt2.py
+# nt2.py
 
 Python package for visualization and post-processing of the [`Entity`](https://github.com/entity-toolkit/entity) simulation data. For usage, please refer to the [documentation](https://entity-toolkit.github.io/wiki/content/2-howto/2-vis/#nt2py). The package is distributed via [`PyPI`](https://pypi.org/project/nt2py/):
 
@@ -6,7 +6,7 @@ Python package for visualization and post-processing of the [`Entity`](https://g
 pip install nt2py
 ```
 
-### Usage
+## Usage
 
 Simply pass the location to the data when initializing the main `Data` object:
 
@@ -28,7 +28,7 @@ data.spectra    # < xr.Dataset
 
 > Note, that by default, the `hdf5` support is disabled in `nt2py` (i.e., only `ADIOS2` format is supported). To enable it, install the package as `pip install "nt2py[hdf5]"` instead of simply `pip install nt2py`.
 
-#### Accessing the data
+### Accessing the data
 
 Fields and spectra are stored as lazily loaded `xarray` datasets (a collection of equal-sized arrays with shared axis coordinates). You may access the coordinates in each dimension using `.coords`:
 
@@ -61,7 +61,7 @@ data.particles.sel(sp=[1, 2, 4]).isel(t=-1)
 
 selects all the particles of species 1, 2, and 4 on the last timestep. The loading of the data itself is done by calling: `.load()` method, which returns a simple `pandas` dataframe.
 
-#### Plotting
+### Plotting
 
 Plot a field (in Cartesian coordinates) at a specific time (or output step):
 
@@ -164,7 +164,7 @@ nt2e.makeFramesAndMovie(
 )
 ```
 
-#### Raw readers
+### Raw readers
 
 In case you want to access the raw data without using `nt2py`'s `xarray`/`dask` lazy-loading, you may do so by using the readers. For example, for `ADIOS2` output data format:
 
@@ -194,7 +194,7 @@ reader.ReadArrayAtTimestep(
 There are many more functions available within the reader. For `hdf5`, you can simply change the import to `nt2.readers.hdf5`, and the rest should remain the same. 
 
 
-### CLI
+## CLI
 
 Since version 1.0.0, `nt2py` also offers a command-line interface, accessed via `nt2` command. To view all the options, simply run:
 
@@ -222,18 +222,18 @@ nt2 plot myrun/mysimulation --fields "E.*;B.*" --sel "x=slice(-5, None); z=0.5"
 
 > If you want to only install the CLI, without the library itself, you may do that via `pipx`: `pipx install nt2py`. 
 
-### Features
+## Features
 
 1. Lazy loading and parallel processing of the simulation data with [`dask`](https://dask.org/).
 2. Context-aware data manipulation with [`xarray`](http://xarray.pydata.org/en/stable/).
 3. Parallel plotting and movie generation with [`loky`](https://pypi.org/project/loky/) and [`ffmpeg`](https://ffmpeg.org/).
 4. Command-line interface, the `nt2` command, for quick plotting (both movies and snapshots).
 
-### Testing
+## Testing
 
 There are unit tests included with the code which also require downloading test data with [`git lfs`](https://git-lfs.com/) (installed separately from `git`). You may download the data simply by running `git lfs pull`.
 
-### TODO
+## TODO
 
 - [x] Unit tests
 - [x] Plugins for other simulation data formats
