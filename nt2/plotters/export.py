@@ -163,6 +163,8 @@ def makeFrames(
     from loky import get_reusable_executor
     import os
 
+    os.makedirs(fpath, exist_ok=True)
+
     ex = get_reusable_executor(max_workers=num_cpus or (os.cpu_count() or 1))
     return [
         f.result()
