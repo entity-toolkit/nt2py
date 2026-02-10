@@ -47,3 +47,11 @@ class BaseContainer:
     def remap(self) -> Optional[dict[str, Callable[[str], str]]]:
         """{ str: (str) -> str } : The coordinate/field remap dictionary."""
         return self.__remap
+
+    def __dask_tokenize__(self) -> tuple[str, str, str]:
+        """Provide a deterministic Dask token for container instances."""
+        return (
+            self.__class__.__name__,
+            self.__path,
+            self.__reader.format.value,
+        )
