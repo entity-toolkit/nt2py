@@ -43,6 +43,7 @@ classifiers = [
 
 [project.optional-dependencies]
 hdf5 = ["h5py"]
+dev = ["black", "pytest"]
 
 [project.urls]
 Repository = "https://github.com/entity-toolkit/nt2py"

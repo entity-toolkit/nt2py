@@ -23,7 +23,7 @@ pkgs.mkShell {
     if [ ! -d ".venv" ]; then
       python3 -m venv .venv
       source .venv/bin/activate
-      pip3 install -r requirements.txt
+      pip3 install ipykernel jupyterlab
       pip3 install pytest
       pip3 install -e .
     else
