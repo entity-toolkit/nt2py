@@ -161,17 +161,24 @@ def makeFrames(
 
     """
     from loky import get_reusable_executor
+    from tqdm.auto import tqdm
     import os
 
     os.makedirs(fpath, exist_ok=True)
 
     ex = get_reusable_executor(max_workers=num_cpus or (os.cpu_count() or 1))
+    futures = [
+        ex.submit(_plot_and_save, ti, t, fpath, plot, data)
+        for ti, t in enumerate(times)
+    ]
     return [
         f.result()
-        for f in [
-            ex.submit(_plot_and_save, ti, t, fpath, plot, data)
-            for ti, t in enumerate(times)
-        ]
+        for f in tqdm(
+            futures,
+            total=len(futures),
+            desc="Rendering frames",
+            unit="frame",
+        )
     ]
 
     # from tqdm import tqdm
