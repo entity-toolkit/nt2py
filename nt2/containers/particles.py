@@ -628,7 +628,7 @@ class Particles(BaseContainer):
         return len(self.nonempty_steps) > 0
 
     @property
-    def nonempty_steps(self) -> list[int]:
+    def nonempty_steps(self) -> List[int]:
         """list[int]: List of timesteps that contain particles data."""
         valid_steps = self.reader.GetValidSteps(self.path, "particles")
         return [
