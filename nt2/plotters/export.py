@@ -1,11 +1,11 @@
-from typing import Any, Callable, Union, Optional
+from typing import Any, Callable, Union, Optional, List
 import matplotlib.pyplot as plt
 
 
 def makeFramesAndMovie(
     name: str,
     plot: Callable,
-    times: list[float],
+    times: List[float],
     data: Any = None,
     **kwargs: Any,
 ) -> bool:
@@ -112,11 +112,11 @@ def _plot_and_save(ti: int, t: float, fpath: str, plot: Callable, data: Any) -> 
 
 def makeFrames(
     plot: Callable,
-    times: list[float],
+    times: List[float],
     fpath: str,
     data: Any = None,
     num_cpus: Optional[int] = None,
-) -> list[bool]:
+) -> List[bool]:
     """
     Create plot frames from a set of timesteps of the same dataset.
 

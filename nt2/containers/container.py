@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Callable, Optional, Dict, Tuple
 
 from nt2.readers.base import BaseReader
 
@@ -8,13 +8,13 @@ class BaseContainer:
 
     __path: str
     __reader: BaseReader
-    __remap: Optional[dict[str, Callable[[str], str]]]
+    __remap: Optional[Dict[str, Callable[[str], str]]]
 
     def __init__(
         self,
         path: str,
         reader: BaseReader,
-        remap: Optional[dict[str, Callable[[str], str]]] = None,
+        remap: Optional[Dict[str, Callable[[str], str]]] = None,
     ):
         """Initializer for the BaseContainer class.
 
@@ -44,11 +44,11 @@ class BaseContainer:
         return self.__reader
 
     @property
-    def remap(self) -> Optional[dict[str, Callable[[str], str]]]:
+    def remap(self) -> Optional[Dict[str, Callable[[str], str]]]:
         """{ str: (str) -> str } : The coordinate/field remap dictionary."""
         return self.__remap
 
-    def __dask_tokenize__(self) -> tuple[str, str, str]:
+    def __dask_tokenize__(self) -> Tuple[str, str, str]:
         """Provide a deterministic Dask token for container instances."""
         return (
             self.__class__.__name__,

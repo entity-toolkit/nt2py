@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List, Dict, Tuple
 
 import sys
 
@@ -41,15 +41,15 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
-    ) -> dict[str, npt.NDArray[Any]]:
-        variables: list[float] = []
+    ) -> Dict[str, npt.NDArray[Any]]:
+        variables: List[float] = []
         for filename in self.GetValidFiles(
             path=path,
             category=category,
         ):
             with bp.FileReader(os.path.join(path, category, filename)) as f:
-                avail: dict[str, Any] = f.available_variables()
-                vars: list[str] = list(avail.keys())
+                avail: Dict[str, Any] = f.available_variables()
+                vars: List[str] = list(avail.keys())
                 if varname in vars:
                     var = f.inquire_variable(varname)
                     if var is not None:
@@ -67,11 +67,11 @@ class Reader(BaseReader):
         self,
         path: str,
         step: int,
-    ) -> dict[str, Any]:
-        dct: dict[str, npt.NDArray[Any]] = {}
+    ) -> Dict[str, Any]:
+        dct: Dict[str, npt.NDArray[Any]] = {}
         with bp.FileReader(self.FullPath(path, "fields", step)) as f:
-            avail: dict[str, Any] = f.available_variables()
-            vars: list[str] = list(avail.keys())
+            avail: Dict[str, Any] = f.available_variables()
+            vars: List[str] = list(avail.keys())
             for var in vars:
                 if var.startswith("X") and var.endswith("e"):
                     var_obj = f.inquire_variable(var)
@@ -85,7 +85,7 @@ class Reader(BaseReader):
         path: str,
         category: str,
         step: int,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         with bp.FileReader(self.FullPath(path, category, step)) as f:
             return {k: f.read_attribute(k) for k in f.available_attributes()}
 
@@ -116,7 +116,7 @@ class Reader(BaseReader):
         step: int,
     ) -> set[str]:
         with bp.FileReader(self.FullPath(path, category, step)) as f:
-            keys: list[str] = f.available_variables()
+            keys: List[str] = f.available_variables()
             return set(
                 filter(
                     lambda c: c.startswith(prefix),
@@ -127,7 +127,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> tuple[int]:
+    ) -> Tuple[int]:
         with bp.FileReader(filename := self.FullPath(path, category, step)) as f:
             if quantity in f.available_variables():
                 var = f.inquire_variable(quantity)
@@ -145,7 +145,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeExplicitlyAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> tuple[int]:
+    ) -> Tuple[int]:
         with bp.FileReader(filename := self.FullPath(path, category, step)) as f:
             if quantity in f.available_variables():
                 var = f.inquire_variable(quantity)
@@ -163,7 +163,7 @@ class Reader(BaseReader):
     @override
     def ReadFieldCoordsAtTimestep(
         self, path: str, step: int
-    ) -> dict[str, npt.NDArray[Any]]:
+    ) -> Dict[str, npt.NDArray[Any]]:
         with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
 
             def get_coord(c: str) -> npt.NDArray[Any]:
@@ -173,13 +173,13 @@ class Reader(BaseReader):
                 else:
                     raise ValueError(f"Field {c} is not a group in the {filename}")
 
-            keys: list[str] = list(f.available_variables())
+            keys: List[str] = list(f.available_variables())
             return {c: get_coord(c) for c in keys if re.match(r"^X[1|2|3]$", c)}
 
     @override
     def ReadFieldLayoutAtTimestep(self, path: str, step: int) -> Layout:
         with bp.FileReader(filename := self.FullPath(path, "fields", step)) as f:
-            attrs: dict[str, Any] = f.available_attributes()
+            attrs: Dict[str, Any] = f.available_attributes()
             keys = list(attrs.keys())
             if "LayoutRight" not in keys:
                 raise ValueError(f"LayoutRight attribute not found in the {filename}")

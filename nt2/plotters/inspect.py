@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional, Union, List, Dict, Tuple
 import matplotlib.pyplot as plt
 import matplotlib.figure as mfigure
 import xarray as xr
@@ -12,7 +12,7 @@ class ds_accessor:
 
     def __axes_grid(
         self,
-        grouped_fields: dict[str, list[str]],
+        grouped_fields: Dict[str, List[str]],
         makeplot: Callable,
         nrows: int,
         ncols: int,
@@ -21,7 +21,7 @@ class ds_accessor:
         aspect: float,
         pad: float,
         **fig_kwargs: Any,
-    ) -> tuple[mfigure.Figure, list[plt.Axes]]:
+    ) -> Tuple[mfigure.Figure, List[plt.Axes]]:
         if aspect > 1:
             axw = size / aspect
             axh = size
@@ -50,7 +50,7 @@ class ds_accessor:
 
     @staticmethod
     def _fixed_axes_grid_with_cbars(
-        fields: list[str],
+        fields: List[str],
         makeplot: Callable,
         makecbar: Callable,
         nrows: int,
@@ -61,7 +61,7 @@ class ds_accessor:
         pad: float,
         cbar_w: float,
         **fig_kwargs: Any,
-    ) -> tuple[mfigure.Figure, list[plt.Axes]]:
+    ) -> Tuple[mfigure.Figure, List[plt.Axes]]:
         from mpl_toolkits.axes_grid1 import Divider, Size
 
         if aspect > 1:
@@ -86,7 +86,7 @@ class ds_accessor:
         v += [Size.Fixed(pad)]
 
         divider = Divider(fig, (0, 0, 1, 1), h, v, aspect=False)
-        axes: list[plt.Axes] = []
+        axes: List[plt.Axes] = []
 
         cntr = 0
         for i in range(nrows):
@@ -116,11 +116,11 @@ class ds_accessor:
         self,
         fig: Optional[mfigure.Figure] = None,
         name: Optional[str] = None,
-        skip_fields: Optional[list[str]] = None,
-        only_fields: Optional[list[str]] = None,
-        fig_kwargs: Optional[dict[str, Any]] = None,
-        plot_kwargs: Optional[dict[str, Any]] = None,
-        movie_kwargs: Optional[dict[str, Any]] = None,
+        skip_fields: Optional[List[str]] = None,
+        only_fields: Optional[List[str]] = None,
+        fig_kwargs: Optional[Dict[str, Any]] = None,
+        plot_kwargs: Optional[Dict[str, Any]] = None,
+        movie_kwargs: Optional[Dict[str, Any]] = None,
         set_aspect: Optional[str] = "equal",
     ) -> Union[mfigure.Figure, bool]:
         """
@@ -236,13 +236,13 @@ class ds_accessor:
 
     @staticmethod
     def _get_fields_to_plot(
-        data: xr.Dataset, skip_fields: list[str], only_fields: list[str]
-    ) -> list[str]:
+        data: xr.Dataset, skip_fields: List[str], only_fields: List[str]
+    ) -> List[str]:
         import re
 
         nfields = len(data.data_vars)
         if nfields > 0:
-            keys: list[str] = [str(k) for k in data.keys()]
+            keys: List[str] = [str(k) for k in data.keys()]
             if len(only_fields) == 0:
                 fields_to_plot = [
                     f for f in keys if not any([re.match(sf, f) for sf in skip_fields])
@@ -262,9 +262,9 @@ class ds_accessor:
 
     @staticmethod
     def _get_fields_minmax(
-        data: xr.Dataset, fields: list[str]
-    ) -> dict[str, Optional[tuple[float, float]]]:
-        minmax: dict[str, Optional[tuple[float, float]]] = {
+        data: xr.Dataset, fields: List[str]
+    ) -> Dict[str, Optional[Tuple[float, float]]]:
+        minmax: Dict[str, Optional[Tuple[float, float]]] = {
             "E": None,
             "B": None,
             "J": None,
@@ -301,10 +301,10 @@ class ds_accessor:
         self,
         data: xr.Dataset,
         fig: Optional[mfigure.Figure],
-        skip_fields: list[str],
-        only_fields: list[str],
-        fig_kwargs: dict[str, Any],
-        plot_kwargs: dict[str, Any],
+        skip_fields: List[str],
+        only_fields: List[str],
+        fig_kwargs: Dict[str, Any],
+        plot_kwargs: Dict[str, Any],
     ) -> mfigure.Figure:
         if len(data.dims) != 1:
             raise ValueError("Pass 1D data; use .sel or .isel to reduce dimension.")
@@ -315,7 +315,7 @@ class ds_accessor:
         fields_to_plot = self._get_fields_to_plot(data, skip_fields, only_fields)
 
         # group fields by their first letter
-        grouped_fields: dict[str, list[str]] = {}
+        grouped_fields: Dict[str, List[str]] = {}
         for f in fields_to_plot:
             key = f[0]
             if key not in grouped_fields:
@@ -376,10 +376,10 @@ class ds_accessor:
         self,
         data: xr.Dataset,
         fig: Optional[mfigure.Figure],
-        skip_fields: list[str],
-        only_fields: list[str],
-        fig_kwargs: dict[str, Any],
-        plot_kwargs: dict[str, Any],
+        skip_fields: List[str],
+        only_fields: List[str],
+        fig_kwargs: Dict[str, Any],
+        plot_kwargs: Dict[str, Any],
         set_aspect: Optional[str],
     ) -> mfigure.Figure:
         if len(data.dims) != 2:

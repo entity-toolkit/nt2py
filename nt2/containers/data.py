@@ -1,4 +1,4 @@
-from typing import Callable, Any, Union, Optional
+from typing import Callable, Any, Union, Optional, List, Dict
 
 import sys
 
@@ -131,7 +131,7 @@ def remap_prtl_quantities_sph(name: str) -> str:
     }.get(shortname, shortname)
 
 
-def compactify(lst: Union[list[Any], KeysView[Any]]) -> str:
+def compactify(lst: Union[List[Any], KeysView[Any]]) -> str:
     c = ""
     cntr = 0
     for l_ in lst:
@@ -154,7 +154,7 @@ class Data(Fields, Particles, Spectra):
         self,
         path: str,
         reader: Optional[BaseReader] = None,
-        remap: Optional[dict[str, Callable[[str], str]]] = None,
+        remap: Optional[Dict[str, Callable[[str], str]]] = None,
         coord_system: Optional[CoordinateSystem] = None,
     ):
         """Initializer for the Data class.
@@ -198,7 +198,7 @@ class Data(Fields, Particles, Spectra):
             self.__reader = reader
 
         # determine the coordinate system and remapping
-        self.__attrs: dict[str, Any] = {}
+        self.__attrs: Dict[str, Any] = {}
         for category in ["fields", "particles", "spectra"]:
             if self.__reader.DefinesCategory(path, category):
                 valid_steps = self.__reader.GetValidSteps(path, category)
@@ -251,7 +251,7 @@ class Data(Fields, Particles, Spectra):
     def makeMovie(
         self,
         plot: Callable,
-        time: Optional[list[float]] = None,
+        time: Optional[List[float]] = None,
         num_cpus: Optional[int] = None,
         **movie_kwargs: Any,
     ) -> bool:
@@ -305,7 +305,7 @@ class Data(Fields, Particles, Spectra):
         return self.__coordinate_system
 
     @property
-    def attrs(self) -> dict[str, Any]:
+    def attrs(self) -> Dict[str, Any]:
         """dict[str, Any]: The attributes of the data."""
         return self.__attrs
 

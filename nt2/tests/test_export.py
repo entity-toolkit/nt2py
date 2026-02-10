@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List, Tuple
 
 from nt2.plotters.export import makeFrames
 
@@ -13,7 +13,7 @@ class _FakeFuture:
 
 class _FakeExecutor:
     def __init__(self):
-        self.calls: list[tuple[int, float, str, Any, Any]] = []
+        self.calls: List[Tuple[int, float, str, Any, Any]] = []
 
     def submit(self, func, ti, t, fpath, plot, data):
         self.calls.append((ti, t, fpath, plot, data))
@@ -28,7 +28,7 @@ def test_make_frames_uses_executor_with_data(tmp_path, monkeypatch):
         lambda max_workers=None: ex,
     )
 
-    called: list[float] = []
+    called: List[float] = []
 
     def plot_frame(t, d):
         called.append(t)

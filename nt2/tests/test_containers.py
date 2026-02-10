@@ -1,5 +1,5 @@
 import pytest
-from typing import Union
+from typing import Union, List
 
 from nt2.readers.base import BaseReader
 from nt2.containers.fields import Fields
@@ -24,8 +24,8 @@ def test_fields(test, field_container: Union[type[Data], type[Fields]]):
     if test["fields"] == {}:
         return
 
-    coords: list[str] = ["x", "y", "z"]
-    flds: list[str] = ["Ex", "Ey", "Ez", "Bx", "By", "Bz"]
+    coords: List[str] = ["x", "y", "z"]
+    flds: List[str] = ["Ex", "Ey", "Ez", "Bx", "By", "Bz"]
 
     def coord_remap(Xold: str) -> str:
         return {
@@ -110,13 +110,11 @@ def test_fields(test, field_container: Union[type[Data], type[Fields]]):
     "test,particle_container",
     [[test, fc] for test in TESTS for fc in [Data, Particles]],
 )
-def test_particles(test, particle_container: type[Data] | type[Particles]):
+def test_particles(test, particle_container: Union[type[Data], type[Particles]]):
     reader: BaseReader = test["reader"]()
     PATH = test["path"]
     if test["particles"] == {}:
         return
-
-    prtl_coords: list[str] = ["x", "y", "z", "ux", "uy", "uz", "w"]
 
     def prtl_remap(Xold: str) -> str:
         return {
@@ -130,7 +128,6 @@ def test_particles(test, particle_container: type[Data] | type[Particles]):
         }.get(Xold, Xold)
 
     if test.get("coords", "cart") != "cart":
-        prtl_coords = ["r", "th", "ph", "ur", "uth", "uph", "w"]
         prtl_remap = lambda Xold: {
             "pX1": "r",
             "pX2": "th",
