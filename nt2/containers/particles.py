@@ -699,7 +699,7 @@ class Particles(BaseContainer):
     ) -> npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]:
         read_colname = None
         if colname == "id":
-            idx = np.concat(
+            idx = np.concatenate(
                 [
                     self.reader.ReadArrayAtTimestep(
                         self.path, "particles", f"pIDX_{sp}", step
@@ -715,7 +715,7 @@ class Particles(BaseContainer):
                 len(self.sp_with_idx) > 0
                 and f"pRNK_{self.sp_with_idx[0]}" in self.quantities
             ):
-                rnk = np.concat(
+                rnk = np.concatenate(
                     [
                         self.reader.ReadArrayAtTimestep(
                             self.path, "particles", f"pRNK_{sp}", step
@@ -745,7 +745,7 @@ class Particles(BaseContainer):
         elif colname == "w":
             read_colname = "pW"
         elif colname == "sp":
-            return np.concat(
+            return np.concatenate(
                 [
                     np.zeros(self._get_count(step, sp), dtype=np.int32) + sp
                     for sp in self.sp_with_idx
@@ -758,7 +758,7 @@ class Particles(BaseContainer):
         else:
             read_colname = f"p{colname}"
 
-        return np.concat(
+        return np.concatenate(
             [
                 self._get_quantity_for_species(read_colname, step, sp)
                 for sp in self.sp_with_idx
