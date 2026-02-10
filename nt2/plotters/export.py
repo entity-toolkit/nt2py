@@ -161,7 +161,7 @@ def makeFrames(
 
     """
     from loky import get_reusable_executor
-    from tqdm.auto import tqdm
+    from tqdm import tqdm
     import os
 
     os.makedirs(fpath, exist_ok=True)
@@ -176,50 +176,7 @@ def makeFrames(
         for f in tqdm(
             futures,
             total=len(futures),
-            desc="Rendering frames",
+            desc=f"rendering frames to {fpath}",
             unit="frame",
         )
     ]
-
-    # from tqdm import tqdm
-    # import multiprocessing as mp
-    # import os
-    #
-    # ctx = mp.get_context()
-    # if num_cpus is None:
-    #     num_cpus = os.cpu_count() or 1
-    #
-    # tasks = [(ti, t, fpath, plot, data) for ti, t in enumerate(times)]
-    #
-    # pool = mp.Pool(num_cpus)
-    #
-    # with ctx.Pool(processes=num_cpus) as pool:
-    #     results = pool.starmap_async(_plot_and_save, tasks)
-    #     out = results.get()
-    #
-    # return list(tqdm(out))
-
-    # global plotAndSave
-    #
-    # def plotAndSave(ti: int, t: float) -> bool:
-    #     import matplotlib.pyplot as plt
-    #
-    #     try:
-    #         if data is None:
-    #             plot(t)
-    #         else:
-    #             plot(t, data)
-    #         plt.savefig(f"{fpath}/{ti:05d}.png")
-    #         plt.close()
-    #         return True
-    #     except Exception as e:
-    #         print(f"Error: {e}")
-    #         return False
-
-    # if fpath doesn't exist, create it
-    # if not os.path.exists(fpath):
-    #     os.makedirs(fpath)
-    #
-    # tasks = [(ti, t) for ti, t in enumerate(times)]
-    # results = [pool.apply_async(plotAndSave, t) for t in tasks]
-    # return [result.get() for result in tqdm(results)]
