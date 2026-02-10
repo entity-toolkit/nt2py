@@ -1,4 +1,15 @@
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Literal, Union
+from typing import (
+    Any,
+    Callable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Literal,
+    Union,
+    Dict,
+    Type,
+)
 import numpy.typing as npt
 from copy import copy
 
@@ -184,8 +195,8 @@ class ParticleDataset:
         read_column: Callable[
             [int, str], npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]
         ],
-        fprec: Optional[type] = np.float32,
-        selection: Optional[dict[str, Selection]] = None,
+        fprec: Optional[Type] = np.float32,
+        selection: Optional[Dict[str, Selection]] = None,
         ddf_index: Optional[dd.DataFrame] = None,
     ):
         self.species = species
