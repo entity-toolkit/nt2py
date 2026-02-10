@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Callable, Any, Union, Optional
 
 import sys
 
@@ -131,7 +131,7 @@ def remap_prtl_quantities_sph(name: str) -> str:
     }.get(shortname, shortname)
 
 
-def compactify(lst: list[Any] | KeysView[Any]) -> str:
+def compactify(lst: Union[list[Any], KeysView[Any]]) -> str:
     c = ""
     cntr = 0
     for l_ in lst:
@@ -153,9 +153,9 @@ class Data(Fields, Particles, Spectra):
     def __init__(
         self,
         path: str,
-        reader: BaseReader | None = None,
-        remap: dict[str, Callable[[str], str]] | None = None,
-        coord_system: CoordinateSystem | None = None,
+        reader: Optional[BaseReader] = None,
+        remap: Optional[dict[str, Callable[[str], str]]] = None,
+        coord_system: Optional[CoordinateSystem] = None,
     ):
         """Initializer for the Data class.
 
@@ -163,12 +163,12 @@ class Data(Fields, Particles, Spectra):
         ----------
         path : str
             Main path to the data
-        reader : BaseReader | None
+        reader : BaseReader, optional
             Reader to use to read the data. If None, it will be determined
             based on the file format.
-        remap : dict[str, Callable[[str], str]] | None
+        remap : dict[str, Callable[[str], str]], optional
             Remap dictionary to use to remap the data names (coords, fields, etc.).
-        coord_system : CoordinateSystem | None
+        coord_system : CoordinateSystem, optional
             Coordinate system of the data. If None, it will be determined
             based on the data attrs (if remap is also None).
 
@@ -251,8 +251,8 @@ class Data(Fields, Particles, Spectra):
     def makeMovie(
         self,
         plot: Callable,
-        time: list[float] | None = None,
-        num_cpus: int | None = None,
+        time: Optional[list[float]] = None,
+        num_cpus: Optional[int] = None,
         **movie_kwargs: Any,
     ) -> bool:
         f"""Create animation with provided plot function.
@@ -263,6 +263,10 @@ class Data(Fields, Particles, Spectra):
             A function that takes a single argument (time in physical units) and produces a plot.
         time : array_like, optional
             An array of time values to use for the animation. If not provided, the entire time range will be used.
+        num_cpus : int, optional
+            The number of CPUs to use for parallel processing. If None, it will use all available CPUs.
+        **movie_kwargs : dict
+            Additional keyword arguments to pass to the movie creation function.
         
         Returns
         -------

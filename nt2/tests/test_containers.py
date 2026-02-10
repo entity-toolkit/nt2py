@@ -1,4 +1,5 @@
 import pytest
+from typing import Union
 
 from nt2.readers.base import BaseReader
 from nt2.containers.fields import Fields
@@ -17,7 +18,7 @@ def check_shape(shape1, shape2):
 @pytest.mark.parametrize(
     "test,field_container", [[test, fc] for test in TESTS for fc in [Data, Fields]]
 )
-def test_fields(test, field_container: type[Data] | type[Fields]):
+def test_fields(test, field_container: Union[type[Data], type[Fields]]):
     reader: BaseReader = test["reader"]()
     PATH = test["path"]
     if test["fields"] == {}:

@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, Union, Optional
 import matplotlib.pyplot as plt
 
 
@@ -36,7 +36,7 @@ def makeFramesAndMovie(
         raise ValueError("Failed to make frames")
 
 
-def makeMovie(**ffmpeg_kwargs: str | int | float) -> bool:
+def makeMovie(**ffmpeg_kwargs: Union[str, int, float]) -> bool:
     """
     Create a movie from frames using the `ffmpeg` command-line tool.
 
@@ -115,7 +115,7 @@ def makeFrames(
     times: list[float],
     fpath: str,
     data: Any = None,
-    num_cpus: int | None = None,
+    num_cpus: Optional[int] = None,
 ) -> list[bool]:
     """
     Create plot frames from a set of timesteps of the same dataset.

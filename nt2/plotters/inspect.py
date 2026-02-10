@@ -1,4 +1,4 @@
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Union
 import matplotlib.pyplot as plt
 import matplotlib.figure as mfigure
 import xarray as xr
@@ -114,24 +114,24 @@ class ds_accessor:
 
     def plot(
         self,
-        fig: mfigure.Figure | None = None,
-        name: str | None = None,
-        skip_fields: list[str] | None = None,
-        only_fields: list[str] | None = None,
-        fig_kwargs: dict[str, Any] | None = None,
-        plot_kwargs: dict[str, Any] | None = None,
-        movie_kwargs: dict[str, Any] | None = None,
-        set_aspect: str | None = "equal",
-    ) -> mfigure.Figure | bool:
+        fig: Optional[mfigure.Figure] = None,
+        name: Optional[str] = None,
+        skip_fields: Optional[list[str]] = None,
+        only_fields: Optional[list[str]] = None,
+        fig_kwargs: Optional[dict[str, Any]] = None,
+        plot_kwargs: Optional[dict[str, Any]] = None,
+        movie_kwargs: Optional[dict[str, Any]] = None,
+        set_aspect: Optional[str] = "equal",
+    ) -> Union[mfigure.Figure, bool]:
         """
         Plots the overview plot for fields at a given time or step (or as a movie).
 
         Kwargs
         ------
-        fig : matplotlib.figure.Figure | None, optional
+        fig : matplotlib.figure.Figure, optional
             The figure to plot the data (if None, a new figure is created). Default is None.
 
-        name : string | None, optional
+        name : string, optional
             Used when saving the frames and the movie. Default is None.
 
         skip_fields : list, optional
@@ -152,7 +152,7 @@ class ds_accessor:
         movie_kwargs : dict, optional
             Additional keyword arguments for makeMovie. Default is {}.
 
-        set_aspect : str | None, optional
+        set_aspect : str, optional
             If None, the aspect ratio will not be enforced. Otherwise, this value is passed to `set_aspect` method of the axes. Default is 'equal'.
 
         Returns
@@ -263,8 +263,8 @@ class ds_accessor:
     @staticmethod
     def _get_fields_minmax(
         data: xr.Dataset, fields: list[str]
-    ) -> dict[str, None | tuple[float, float]]:
-        minmax: dict[str, None | tuple[float, float]] = {
+    ) -> dict[str, Optional[tuple[float, float]]]:
+        minmax: dict[str, Optional[tuple[float, float]]] = {
             "E": None,
             "B": None,
             "J": None,
@@ -300,7 +300,7 @@ class ds_accessor:
     def plot_frame_1d(
         self,
         data: xr.Dataset,
-        fig: mfigure.Figure | None,
+        fig: Optional[mfigure.Figure],
         skip_fields: list[str],
         only_fields: list[str],
         fig_kwargs: dict[str, Any],
@@ -375,12 +375,12 @@ class ds_accessor:
     def plot_frame_2d(
         self,
         data: xr.Dataset,
-        fig: mfigure.Figure | None,
+        fig: Optional[mfigure.Figure],
         skip_fields: list[str],
         only_fields: list[str],
         fig_kwargs: dict[str, Any],
         plot_kwargs: dict[str, Any],
-        set_aspect: str | None,
+        set_aspect: Optional[str],
     ) -> mfigure.Figure:
         if len(data.dims) != 2:
             raise ValueError("Pass 2D data; use .sel or .isel to reduce dimension.")

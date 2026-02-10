@@ -1,3 +1,4 @@
+from typing import Union
 import typer, nt2, os
 from typing_extensions import Annotated
 import matplotlib.pyplot as plt
@@ -22,11 +23,11 @@ def check_path(path: str) -> str:
     return path
 
 
-def check_sel(sel: str) -> dict[str, int | float | slice]:
+def check_sel(sel: str) -> dict[str, Union[int, float, slice]]:
     if sel == "":
         return {}
     sel_list = sel.strip().split(";")
-    sel_dict: dict[str, int | float | slice] = {}
+    sel_dict: dict[str, Union[int, float, slice]] = {}
     for _, s in enumerate(sel_list):
         coord, arg = s.strip().split("=", 1)
         coord = coord.strip()
@@ -130,10 +131,10 @@ def plot(
         if sel != {}:
             slices = {}
             sels = {}
-            slices: dict[str, slice | float | int] = {
+            slices: dict[str, Union[slice, float, int]] = {
                 k: v for k, v in sel.items() if isinstance(v, slice)
             }
-            sels: dict[str, slice | float | int] = {
+            sels: dict[str, Union[slice, float, int]] = {
                 k: v for k, v in sel.items() if not isinstance(v, slice)
             }
             d = d.sel(**sels, method="nearest")

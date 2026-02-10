@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Literal
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Literal, Union
 import numpy.typing as npt
 from copy import copy
 
@@ -13,15 +13,15 @@ import matplotlib.axes as maxes
 from nt2.containers.container import BaseContainer
 
 
-IntSelector = int | Sequence[int] | slice | Tuple[int, int]
-FloatSelector = float | slice | Sequence[float] | Tuple[float, float]
+IntSelector = Union[int, Sequence[int], slice, Tuple[int, int]]
+FloatSelector = Union[float, slice, Sequence[float], Tuple[float, float]]
 
 
 class Selection:
     def __init__(
         self,
         type: Literal["value", "range", "list"],
-        value: Optional[int | float | list | tuple] = None,
+        value: Optional[Union[int, float, list, tuple]] = None,
     ):
         self.type = type
         self.value = value
@@ -113,7 +113,7 @@ class Selection:
 
 
 def _coerce_selector_to_mask(
-    s: IntSelector | FloatSelector,
+    s: Union[IntSelector, FloatSelector],
     series: Any,
     inclusive_tuple: bool = True,
     method="exact",
@@ -182,7 +182,7 @@ class ParticleDataset:
         times: npt.NDArray[np.float64],
         colnames: List[str],
         read_column: Callable[
-            [int, str], npt.NDArray[np.float64 | np.int64 | np.float32 | np.int32]
+            [int, str], npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]
         ],
         fprec: Optional[type] = np.float32,
         selection: Optional[dict[str, Selection]] = None,
@@ -249,7 +249,7 @@ class ParticleDataset:
 
     def sel(
         self,
-        t: Optional[IntSelector | FloatSelector] = None,
+        t: Optional[Union[IntSelector, FloatSelector]] = None,
         st: Optional[IntSelector] = None,
         sp: Optional[IntSelector] = None,
         id: Optional[IntSelector] = None,
@@ -381,7 +381,7 @@ class ParticleDataset:
         ddf = dd.from_delayed(delayed_parts, meta=meta)
         return ddf
 
-    def load(self, cols: Sequence[str] | None = None) -> pd.DataFrame:
+    def load(self, cols: Optional[Sequence[str]] = None) -> pd.DataFrame:
         if cols is None:
             cols = self.columns
 
@@ -445,9 +445,9 @@ class ParticleDataset:
 
     def spectrum_plot(
         self,
-        ax: maxes.Axes | None = None,
-        bins: np.ndarray | None = None,
-        quantity: Callable[[pd.DataFrame], np.ndarray] | None = None,
+        ax: Optional[maxes.Axes] = None,
+        bins: Optional[npt.NDArray] = None,
+        quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
     ):
         if ax is None:
             ax = plt.gca()
@@ -480,10 +480,10 @@ class ParticleDataset:
 
     def phase_plot(
         self,
-        ax: maxes.Axes | None = None,
-        x_quantity: Callable[[pd.DataFrame], np.ndarray] | None = None,
-        y_quantity: Callable[[pd.DataFrame], np.ndarray] | None = None,
-        xy_bins: Tuple[np.ndarray, np.ndarray] | None = None,
+        ax: Optional[maxes.Axes] = None,
+        x_quantity: Optional[Callable[[pd.DataFrame], np.ndarray]] = None,
+        y_quantity: Optional[Callable[[pd.DataFrame], np.ndarray]] = None,
+        xy_bins: Optional[Tuple[npt.NDArray, npt.NDArray]] = None,
         **kwargs: Any,
     ):
         if ax is None:
@@ -641,7 +641,7 @@ class Particles(BaseContainer):
         return self.__particles_defined
 
     @property
-    def particles(self) -> ParticleDataset | None:
+    def particles(self) -> Optional[ParticleDataset]:
         """Returns the particles data.
 
         Returns
@@ -675,7 +675,7 @@ class Particles(BaseContainer):
         read_colname: str,
         step: int,
         sp: int,
-    ) -> npt.NDArray[np.float64 | np.int64]:
+    ) -> npt.NDArray[Union[np.float64, np.int64]]:
         if f"{read_colname}_{sp}" in self.quantities:
             return self.reader.ReadArrayAtTimestep(
                 self.path, "particles", f"{read_colname}_{sp}", step
@@ -685,7 +685,7 @@ class Particles(BaseContainer):
 
     def _read_column(
         self, step: int, colname: str
-    ) -> npt.NDArray[np.float64 | np.int64 | np.float32 | np.int32]:
+    ) -> npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]:
         read_colname = None
         if colname == "id":
             idx = np.concat(

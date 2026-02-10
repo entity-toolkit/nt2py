@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 from nt2.plotters.export import (
     makeFramesAndMovie,
 )
@@ -75,7 +75,7 @@ class accessor:
                 plt.gca().set_aspect("equal")
             plt.tight_layout()
 
-        num_cpus: int | None = movie_kwargs.pop("num_cpus", None)
+        num_cpus: Optional[int] = movie_kwargs.pop("num_cpus", None)
         return makeFramesAndMovie(
             name=name,
             data=self._obj,
