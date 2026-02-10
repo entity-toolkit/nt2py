@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING, List, Dict, Tuple
+from typing import Any, TYPE_CHECKING, List, Dict, Tuple, Set
 
 import sys
 
@@ -142,7 +142,7 @@ class Reader(BaseReader):
         category: str,
         prefix: str,
         step: int,
-    ) -> set[str]:
+    ) -> Set[str]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -152,7 +152,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> Tuple[int]:
+    ) -> Tuple[int, ...]:
         h5 = _require_h5py()
         with h5.File(filename := self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -172,7 +172,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeExplicitlyAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> Tuple[int]:
+    ) -> Tuple[int, ...]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)

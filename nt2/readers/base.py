@@ -1,4 +1,4 @@
-from typing import Any, List, Tuple, Dict
+from typing import Any, List, Tuple, Dict, Set
 import numpy.typing as npt
 import os, re, logging
 
@@ -155,7 +155,7 @@ class BaseReader:
         category: str,
         prefix: str,
         step: int,
-    ) -> set[str]:
+    ) -> Set[str]:
         """Read the names of the variables in a given category and timestep.
 
         Parameters
@@ -177,7 +177,7 @@ class BaseReader:
         """
         raise NotImplementedError("ReadCategoryNamesAtTimestep is not implemented")
 
-    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> set[int]:
+    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> Set[int]:
         """Read the particle species indices at a given timestep.
 
         Parameters
@@ -204,7 +204,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> Tuple[int]:
+    ) -> Tuple[int, ...]:
         """Read the shape of an array at a given timestep.
 
         Parameters
@@ -232,7 +232,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> Tuple[int]:
+    ) -> Tuple[int, ...]:
         """Read the shape of an array at a given timestep, without relying on metadata.
 
         Parameters

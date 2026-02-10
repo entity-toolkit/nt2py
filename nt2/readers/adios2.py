@@ -1,4 +1,4 @@
-from typing import Any, List, Dict, Tuple
+from typing import Any, List, Dict, Tuple, Set
 
 import sys
 
@@ -114,7 +114,7 @@ class Reader(BaseReader):
         category: str,
         prefix: str,
         step: int,
-    ) -> set[str]:
+    ) -> Set[str]:
         with bp.FileReader(self.FullPath(path, category, step)) as f:
             keys: List[str] = f.available_variables()
             return set(
@@ -127,7 +127,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> Tuple[int]:
+    ) -> Tuple[int, ...]:
         with bp.FileReader(filename := self.FullPath(path, category, step)) as f:
             if quantity in f.available_variables():
                 var = f.inquire_variable(quantity)
@@ -145,7 +145,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeExplicitlyAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> Tuple[int]:
+    ) -> Tuple[int, ...]:
         with bp.FileReader(filename := self.FullPath(path, category, step)) as f:
             if quantity in f.available_variables():
                 var = f.inquire_variable(quantity)
