@@ -1,6 +1,6 @@
 ## nt2.py
 
-Python package for visualization and post-processing of the [`Entity`](https://github.com/entity-toolkit/entity) simulation data. For usage, please refer to the [documentation](https://entity-toolkit.github.io/wiki/getting-started/vis/#nt2py). The package is distributed via [`PyPI`](https://pypi.org/project/nt2py/):
+Python package for visualization and post-processing of the [`Entity`](https://github.com/entity-toolkit/entity) simulation data. For usage, please refer to the [documentation](https://entity-toolkit.github.io/wiki/content/2-howto/2-vis/#nt2py). The package is distributed via [`PyPI`](https://pypi.org/project/nt2py/):
 
 ```sh
 pip install nt2py
@@ -14,15 +14,13 @@ Simply pass the location to the data when initializing the main `Data` object:
 import nt2
 
 data = nt2.Data("path/to/data")
-# example: 
-#   data = nt2.Data("path/to/shock")
 ```
 
 The data is stored in specialized containers which can be accessed via corresponding attributes:
 
 ```python
 data.fields     # < xr.Dataset
-data.particles  # < dict[int : xr.Dataset]
+data.particles  # < special object which returns a pd.DataFrame when .load() is called
 data.spectra    # < xr.Dataset
 ```
 
@@ -30,9 +28,42 @@ data.spectra    # < xr.Dataset
 
 > Note, that by default, the `hdf5` support is disabled in `nt2py` (i.e., only `ADIOS2` format is supported). To enable it, install the package as `pip install "nt2py[hdf5]"` instead of simply `pip install nt2py`.
 
-#### Examples
+#### Accessing the data
 
-Plot a field (in cartesian space) at a specific time (or output step):
+Fields and spectra are stored as lazily loaded `xarray` datasets (a collection of equal-sized arrays with shared axis coordinates). You may access the coordinates in each dimension using `.coords`:
+
+```python
+data.fields.coords
+data.spectra.coords
+```
+
+Individual arrays can be requested by simply using, e.g., `data.fields.Ex` etc. One can also use slicing/selecting via the coordinates, i.e.,
+
+```python 
+data.fields.sel(t=5, method="nearest")
+```
+
+accesses all the fields at time `t=5` (using `method="nearest"` means it will take the closest time to value `5`). You may also access by index in each coordinate:
+
+```python
+data.fields.isel(x=-1)
+```
+
+accesses all the fields in the last position along the `x` coordinate. 
+
+Note that all these operations do not load the actual data into memory; instead, the data is only loaded when explicitly requested (i.e., when plotting or explicitly calling `.values` or `.load()`.
+
+Particles are stored in a special lazy container which acts very similar to `xarray`; you can still make selections using specific queries. For instance,
+
+```python
+data.particles.sel(sp=[1, 2, 4]).isel(t=-1)
+```
+
+selects all the particles of species 1, 2, and 4 on the last timestep. The loading of the data itself is done by calling: `.load()` method, which returns a simple `pandas` dataframe.
+
+#### Plotting
+
+Plot a field (in Cartesian coordinates) at a specific time (or output step):
 
 ```python
 data.fields.Ex.sel(t=10.0, method="nearest").plot() # time ~ 10
@@ -78,29 +109,35 @@ data.fields\
 You can also create a movie of a single field quantity (can be custom):
 
 ```python
-(data.fields.Ex * data.fields.Bx).sel(x=slice(None, 0.2)).movie.plot(name="ExBx", vmin=-0.01, vmax=0.01, cmap="BrBG")
+(data.fields.Ex * data.fields.Bx).sel(x=slice(None, 0.2)).movie.plot(name="ExBx")
 ```
 
 For particles, one can also make 2D phase-space plots:
 
 ```python
-data.particles[1].sel(t=1.0, method="nearest").particles.phaseplot(x="x", y="uy", xnbins=100, ynbins=200, xlims=(0, 100), cmap="inferno")
+data.particles.sel(sp=1).sel(t=1.0, method="nearest").phase_plot(
+    x_quantity=lambda f: f.x,
+    y_quantity=lambda f: f.ux,
+    xy_bins=(np.linspace(0, 60, 100), np.linspace(-2, 2, 100)),
+)
+```
+
+or a spectrum plot:
+
+```python
+data.particles.sel(sp=[1, 2]).sel(t=1.0, method="nearest").spectrum_plot()
 ```
 
 You may also combine different quantities and plots (e.g., fields & particles) to produce a more customized movie:
 
 ```python
 def plot(t, data):
-    fig, ax = mpl.pyplot.subplots()
+    fig, ax = plt.subplots()
     data.fields.Ex.sel(t=t, method="nearest").sel(x=slice(None, 0.2)).plot(
         ax=ax, vmin=-0.001, vmax=0.001, cmap="BrBG"
     )
-    for sp in range(1, 3):
-        ax.scatter(
-            data.particles[sp].sel(t=t, method="nearest").x,
-            data.particles[sp].sel(t=t, method="nearest").y,
-            c="r" if sp == 1 else "b",
-        )
+    prtls = data.particles.sel(t=t, method="nearest").load()
+    ax.scatter(prtls.x, prtls.y, c="r" if prtls.sp == 1 else "b")
     ax.set_aspect(1)
 data.makeMovie(plot)
 ```
@@ -108,7 +145,7 @@ data.makeMovie(plot)
 You may also access the movie-making functionality directly in case you want to use it for other things:
 
 ```python
-import nt2.export as nt2e
+import nt2.plotters.export as nt2e
 
 def plot(t):
   ...
@@ -127,16 +164,35 @@ nt2e.makeFramesAndMovie(
 )
 ```
 
-### Dashboard
+#### Raw readers
 
-Support for the dask dashboard is still in beta, but you can access it by first launching the dashboard client:
+In case you want to access the raw data without using `nt2py`'s `xarray`/`dask` lazy-loading, you may do so by using the readers. For example, for `ADIOS2` output data format:
 
 ```python
-import nt2 
-nt2.Dashboard()
+import nt2.readers.adios2 as nt2a
+
+# define a reader
+reader = nt2a.Reader()
+
+# get all the valid steps for particles
+valid_steps = reader.GetValidSteps("path/to/sim", "particles")
+
+# get all variable names which have prefix "p" at the first valid step
+variable_names = reader.ReadCategoryNamesAtTimestep(
+    "path/to/sim", "particles", "p", valid_steps[0]
+)
+
+# convert the variable set into a list and take the first element
+variable = list(variable_names)[0]
+
+# read the actual array from the file
+reader.ReadArrayAtTimestep(
+    "path/to/sim", "particles", variable, valid_steps[0]
+)
 ```
 
-This will output the port where the dashboard server is running, e.g., `Dashboard: http://127.0.0.1:8787/status`. Click on it (or enter in your browser) to open the dashboard.
+There are many more functions available within the reader. For `hdf5`, you can simply change the import to `nt2.readers.hdf5`, and the rest should remain the same. 
+
 
 ### CLI
 
@@ -170,7 +226,7 @@ nt2 plot myrun/mysimulation --fields "E.*;B.*" --sel "x=slice(-5, None); z=0.5"
 
 1. Lazy loading and parallel processing of the simulation data with [`dask`](https://dask.org/).
 2. Context-aware data manipulation with [`xarray`](http://xarray.pydata.org/en/stable/).
-3. Parallel plotting and movie generation with [`multiprocessing`](https://docs.python.org/3/library/multiprocessing.html) and [`ffmpeg`](https://ffmpeg.org/).
+3. Parallel plotting and movie generation with [`loky`](https://pypi.org/project/loky/) and [`ffmpeg`](https://ffmpeg.org/).
 4. Command-line interface, the `nt2` command, for quick plotting (both movies and snapshots).
 
 ### Testing
@@ -188,3 +244,5 @@ There are unit tests included with the code which also require downloading test 
 - [x] Ghost cells support
 - [x] Usage examples
 - [ ] Parse the log file with timings
+- [x] Raw reader
+- [x] 3.14-compatible parallel output

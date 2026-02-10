@@ -1,5 +1,7 @@
 import xarray as xr
 import numpy as np
+import numpy.typing as npt
+from typing import Optional, Tuple
 
 
 class ds_accessor:
@@ -10,10 +12,10 @@ class ds_accessor:
         self,
         x: str = "x",
         y: str = "ux",
-        xbins: None | np.ndarray = None,
-        ybins: None | np.ndarray = None,
-        xlims: None | tuple[float] = None,
-        ylims: None | tuple[float] = None,
+        xbins: Optional[npt.NDArray] = None,
+        ybins: Optional[npt.NDArray] = None,
+        xlims: Optional[Tuple[float, float]] = None,
+        ylims: Optional[Tuple[float, float]] = None,
         xnbins: int = 100,
         ynbins: int = 100,
         **kwargs,

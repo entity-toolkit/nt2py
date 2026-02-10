@@ -1,10 +1,11 @@
-from typing import Any, Callable
+from typing import Any, Callable, Union, Optional, List
+import matplotlib.pyplot as plt
 
 
 def makeFramesAndMovie(
     name: str,
     plot: Callable,
-    times: list[float],
+    times: List[float],
     data: Any = None,
     **kwargs: Any,
 ) -> bool:
@@ -35,7 +36,7 @@ def makeFramesAndMovie(
         raise ValueError("Failed to make frames")
 
 
-def makeMovie(**ffmpeg_kwargs: str | int | float) -> bool:
+def makeMovie(**ffmpeg_kwargs: Union[str, int, float]) -> bool:
     """
     Create a movie from frames using the `ffmpeg` command-line tool.
 
@@ -95,13 +96,27 @@ def makeMovie(**ffmpeg_kwargs: str | int | float) -> bool:
         return False
 
 
+def _plot_and_save(ti: int, t: float, fpath: str, plot: Callable, data: Any) -> bool:
+    try:
+        if data is None:
+            plot(t)
+        else:
+            plot(t, data)
+        plt.savefig(f"{fpath}/{ti:05d}.png")
+        plt.close()
+        return True
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
 def makeFrames(
     plot: Callable,
-    times: list[float],
+    times: List[float],
     fpath: str,
     data: Any = None,
-    num_cpus: int | None = None,
-) -> list[bool]:
+    num_cpus: Optional[int] = None,
+) -> List[bool]:
     """
     Create plot frames from a set of timesteps of the same dataset.
 
@@ -145,36 +160,23 @@ def makeFrames(
     >>> makeFrames(plot_func, range(100), 'output/', num_cpus=16)
 
     """
-
+    from loky import get_reusable_executor
     from tqdm import tqdm
-    import multiprocessing as mp
-    import matplotlib.pyplot as plt
     import os
 
-    global plotAndSave
+    os.makedirs(fpath, exist_ok=True)
 
-    def plotAndSave(ti: int, t: float, fpath: str) -> bool:
-        try:
-            if data is None:
-                plot(t)
-            else:
-                plot(t, data)
-            plt.savefig(f"{fpath}/{ti:05d}.png")
-            plt.close()
-            return True
-        except Exception as e:
-            print(f"Error: {e}")
-            return False
-
-    if num_cpus is None:
-        num_cpus = mp.cpu_count()
-
-    pool = mp.Pool(num_cpus)
-
-    # if fpath doesn't exist, create it
-    if not os.path.exists(fpath):
-        os.makedirs(fpath)
-
-    tasks = [[ti, t, fpath] for ti, t in enumerate(times)]
-    results = [pool.apply_async(plotAndSave, t) for t in tasks]
-    return [result.get() for result in tqdm(results)]
+    ex = get_reusable_executor(max_workers=num_cpus or (os.cpu_count() or 1))
+    futures = [
+        ex.submit(_plot_and_save, ti, t, fpath, plot, data)
+        for ti, t in enumerate(times)
+    ]
+    return [
+        f.result()
+        for f in tqdm(
+            futures,
+            total=len(futures),
+            desc=f"rendering frames to {fpath}",
+            unit="frame",
+        )
+    ]

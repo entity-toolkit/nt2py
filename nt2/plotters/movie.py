@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional, Dict
 from nt2.plotters.export import (
     makeFramesAndMovie,
 )
@@ -21,8 +21,8 @@ class accessor:
     def plot(
         self,
         name: str,
-        movie_kwargs: dict[str, Any] = {},
-        fig_kwargs: dict[str, Any] = {},
+        movie_kwargs: Dict[str, Any] = {},
+        fig_kwargs: Dict[str, Any] = {},
         aspect_equal: bool = False,
         **kwargs: Any,
     ) -> bool:
@@ -75,7 +75,7 @@ class accessor:
                 plt.gca().set_aspect("equal")
             plt.tight_layout()
 
-        num_cpus: int | None = movie_kwargs.pop("num_cpus", None)
+        num_cpus: Optional[int] = movie_kwargs.pop("num_cpus", None)
         return makeFramesAndMovie(
             name=name,
             data=self._obj,

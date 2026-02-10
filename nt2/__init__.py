@@ -1,4 +1,4 @@
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 import nt2.containers.data as nt2_data
 

@@ -1,3 +1,4 @@
+from typing import Union
 from enum import Enum
 import os
 import re
@@ -63,7 +64,7 @@ def DetermineDataFormat(path: str) -> Format:
     raise ValueError("Could not determine file format.")
 
 
-def ToHumanReadable(num: float | int, suffix: str = "B") -> str:
+def ToHumanReadable(num: Union[float, int], suffix: str = "B") -> str:
     """Convert a number to a human-readable format with SI prefixes.
 
     Parameters

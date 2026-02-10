@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List, Tuple, Dict, Set
 import numpy.typing as npt
 import os, re, logging
 
@@ -12,7 +12,7 @@ class BaseReader:
 
     """
 
-    skipped_files: list[str]
+    skipped_files: List[str]
 
     def __init__(self) -> None:
         """Initializer for the BaseReader class."""
@@ -52,7 +52,7 @@ class BaseReader:
         category: str,
         varname: str,
         newname: str,
-    ) -> dict[str, npt.NDArray[Any]]:
+    ) -> Dict[str, npt.NDArray[Any]]:
         """Read a variable at each timestep and return a dictionary with the new name.
 
         Parameters
@@ -79,7 +79,7 @@ class BaseReader:
         path: str,
         category: str,
         step: int,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Read the attributes of a given timestep.
 
         Parameters
@@ -103,7 +103,7 @@ class BaseReader:
         self,
         path: str,
         step: int,
-    ) -> dict[str, npt.NDArray[Any]]:
+    ) -> Dict[str, npt.NDArray[Any]]:
         """Read the coordinates of cell edges at a given timestep.
 
         Parameters
@@ -155,7 +155,7 @@ class BaseReader:
         category: str,
         prefix: str,
         step: int,
-    ) -> set[str]:
+    ) -> Set[str]:
         """Read the names of the variables in a given category and timestep.
 
         Parameters
@@ -177,7 +177,7 @@ class BaseReader:
         """
         raise NotImplementedError("ReadCategoryNamesAtTimestep is not implemented")
 
-    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> set[int]:
+    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> Set[int]:
         """Read the particle species indices at a given timestep.
 
         Parameters
@@ -204,7 +204,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> tuple[int]:
+    ) -> Tuple[int, ...]:
         """Read the shape of an array at a given timestep.
 
         Parameters
@@ -232,7 +232,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> tuple[int]:
+    ) -> Tuple[int, ...]:
         """Read the shape of an array at a given timestep, without relying on metadata.
 
         Parameters
@@ -260,7 +260,7 @@ class BaseReader:
         self,
         path: str,
         step: int,
-    ) -> dict[str, npt.NDArray[Any]]:
+    ) -> Dict[str, npt.NDArray[Any]]:
         """Read the coordinates of the fields at a given timestep.
 
         Parameters
@@ -301,7 +301,7 @@ class BaseReader:
     # # # # # # # # # # # # # # # # # # # # # # # #
 
     @staticmethod
-    def CategoryFiles(path: str, category: str, format: str) -> list[str]:
+    def CategoryFiles(path: str, category: str, format: str) -> List[str]:
         """Get the list of files in a given category and format.
 
         Parameters
@@ -360,7 +360,7 @@ class BaseReader:
         self,
         path: str,
         category: str,
-    ) -> list[int]:
+    ) -> List[int]:
         """Get valid timesteps (sorted) in a given path and category.
 
         Parameters
@@ -376,7 +376,7 @@ class BaseReader:
             A list of valid timesteps in the given path and category.
 
         """
-        steps: list[int] = []
+        steps: List[int] = []
         for filename in BaseReader.CategoryFiles(
             path=path,
             category=category,
@@ -399,7 +399,7 @@ class BaseReader:
         self,
         path: str,
         category: str,
-    ) -> list[str]:
+    ) -> List[str]:
         """Get valid files (sorted by timestep) in a given path and category.
 
         Parameters
@@ -415,7 +415,7 @@ class BaseReader:
             A list of valid files in the given path and category.
 
         """
-        files: list[str] = []
+        files: List[str] = []
         for filename in BaseReader.CategoryFiles(
             path=path,
             category=category,

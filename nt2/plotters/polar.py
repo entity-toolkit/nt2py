@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Any
+from typing import Any, Dict
 
 from nt2.utils import DataIs2DPolar
 
@@ -176,7 +176,7 @@ class ds_accessor:
         fxs = self._obj[fr] * np.sin(ths) + self._obj[fth] * np.cos(ths)
         fys = self._obj[fr] * np.cos(ths) - self._obj[fth] * np.sin(ths)
 
-        props: dict[str, Any] = {
+        props: Dict[str, Any] = {
             "method": "nearest",
             "bounds_error": False,
             "fill_value": 0,

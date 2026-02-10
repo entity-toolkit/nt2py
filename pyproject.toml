@@ -7,6 +7,7 @@ name = "nt2py"
 dynamic = ["version"]
 dependencies = [
   "types-setuptools",
+  "typing_extensions",
   "dask[complete]",
   "adios2",
   "bokeh",
@@ -17,6 +18,7 @@ dependencies = [
   "tqdm",
   "contourpy",
   "typer",
+  "loky",
 ]
 requires-python = ">=3.8"
 authors = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
@@ -42,6 +44,7 @@ classifiers = [
 
 [project.optional-dependencies]
 hdf5 = ["h5py"]
+dev = ["black", "pytest"]
 
 [project.urls]
 Repository = "https://github.com/entity-toolkit/nt2py"

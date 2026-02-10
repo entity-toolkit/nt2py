@@ -5,26 +5,21 @@ import dask.array as da
 import xarray as xr
 
 from nt2.containers.container import BaseContainer
-from nt2.readers.base import BaseReader
 from nt2.utils import Layout
 
 
 class Fields(BaseContainer):
     """Parent class to manage the fields dataframe."""
 
-    @staticmethod
-    @dask.delayed
-    def __read_field(path: str, reader: BaseReader, field: str, step: int) -> Any:
+    def _read_field(self, layout: Layout, field: str, step: int) -> Any:
         """Reads a field from the data.
 
         This is a dask-delayed function used further to build the dataset.
 
         Parameters
         ----------
-        path : str
-            Main path to the data.
-        reader : BaseReader
-            Reader to use to read the data.
+        layout : Layout
+            Layout of the field.
         field : str
             Field to read.
         step : int
@@ -36,7 +31,10 @@ class Fields(BaseContainer):
             Field data.
 
         """
-        return reader.ReadArrayAtTimestep(path, "fields", field, step)
+        if layout == Layout.L:
+            return self.reader.ReadArrayAtTimestep(self.path, "fields", field, step)
+        else:
+            return self.reader.ReadArrayAtTimestep(self.path, "fields", field, step).T
 
     def __init__(
         self,
@@ -53,7 +51,7 @@ class Fields(BaseContainer):
         super(Fields, self).__init__(**kwargs)
         if self.reader.DefinesCategory(self.path, "fields"):
             self.__fields_defined = True
-            self.__fields = self.__read_fields()
+            self.__fields = self._read_fields()
         else:
             self.__fields_defined = False
             self.__fields = xr.Dataset()
@@ -68,7 +66,7 @@ class Fields(BaseContainer):
         """xr.Dataset: The fields dataframe."""
         return self.__fields
 
-    def __read_fields(self) -> xr.Dataset:
+    def _read_fields(self) -> xr.Dataset:
         """Helper function to read the fields dataframe."""
         self.reader.VerifySameCategoryNames(self.path, "fields", "f")
         self.reader.VerifySameFieldShapes(self.path)
@@ -98,17 +96,13 @@ class Fields(BaseContainer):
         steps = self.reader.ReadPerTimestepVariable(self.path, "fields", "Step", "s")
 
         edge_coords = self.reader.ReadEdgeCoordsAtTimestep(self.path, first_step)
-        if self.remap is None or "coords" not in self.remap:
-
-            def remap(x: str) -> str:
-                return x
-
-            coord_remap = remap
-        else:
-            coord_remap = self.remap["coords"]
         new_edge_coords = {}
         for coord in edge_coords.keys():
-            assoc_x = coord_remap(coord[:-1])
+            assoc_x = (
+                coord[:-1]
+                if (self.remap is None or "coords" not in self.remap)
+                else self.remap["coords"](coord[:-1])
+            )
             new_edge_coords[assoc_x + "_min"] = (assoc_x, edge_coords[coord][:-1])
             new_edge_coords[assoc_x + "_max"] = (assoc_x, edge_coords[coord][1:])
         edge_coords = new_edge_coords
@@ -116,30 +110,19 @@ class Fields(BaseContainer):
         all_dims = {**times, **coords}.keys()
         all_coords = {**times, **coords, "s": ("t", steps["s"]), **edge_coords}
 
-        def remap_name(name: str) -> str:
-            """
-            Remaps the field name if remap is provided
-            """
-            if self.remap is not None and "fields" in self.remap:
-                return self.remap["fields"](name)
-            return name
-
-        def get_field(name: str, step: int) -> Any:
-            """
-            Reads a field from the data
-            """
-            if layout == Layout.L:
-                return Fields.__read_field(self.path, self.reader, name, step)
-            else:
-                return Fields.__read_field(self.path, self.reader, name, step).T
-
         return xr.Dataset(
             {
-                remap_name(name): xr.DataArray(
+                (
+                    remapped_name := (
+                        self.remap["fields"](name)
+                        if (self.remap is not None and "fields" in self.remap)
+                        else name
+                    )
+                ): xr.DataArray(
                     da.stack(
                         [
                             da.from_delayed(
-                                get_field(name, step),
+                                dask.delayed(self._read_field)(layout, name, step),
                                 shape=shape[:: -1 if layout == Layout.R else 1],
                                 dtype="float",
                             )
@@ -147,7 +130,7 @@ class Fields(BaseContainer):
                         ],
                         axis=0,
                     ),
-                    name=remap_name(name),
+                    name=remapped_name,
                     dims=all_dims,
                     coords=all_coords,
                 )

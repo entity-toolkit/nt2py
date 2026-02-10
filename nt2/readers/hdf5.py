@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, List, Dict, Tuple, Set
 
 import sys
 
@@ -71,8 +71,8 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
-    ) -> dict[str, npt.NDArray[Any]]:
-        variables: list[Any] = []
+    ) -> Dict[str, npt.NDArray[Any]]:
+        variables: List[Any] = []
         h5 = _require_h5py()
         for filename in self.GetValidFiles(
             path=path,
@@ -99,7 +99,7 @@ class Reader(BaseReader):
         path: str,
         category: str,
         step: int,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             return {k: v for k, v in f.attrs.items()}
@@ -109,7 +109,7 @@ class Reader(BaseReader):
         self,
         path: str,
         step: int,
-    ) -> dict[str, npt.NDArray[Any]]:
+    ) -> Dict[str, npt.NDArray[Any]]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -142,17 +142,17 @@ class Reader(BaseReader):
         category: str,
         prefix: str,
         step: int,
-    ) -> set[str]:
+    ) -> Set[str]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            keys: list[str] = list(f0.keys())
+            keys: List[str] = list(f0.keys())
             return set(c for c in keys if c.startswith(prefix))
 
     @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> tuple[int]:
+    ) -> Tuple[int, ...]:
         h5 = _require_h5py()
         with h5.File(filename := self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -172,7 +172,7 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeExplicitlyAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> tuple[int]:
+    ) -> Tuple[int, ...]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -192,7 +192,7 @@ class Reader(BaseReader):
     @override
     def ReadFieldCoordsAtTimestep(
         self, path: str, step: int
-    ) -> dict[str, npt.NDArray[Any]]:
+    ) -> Dict[str, npt.NDArray[Any]]:
         h5 = _require_h5py()
         with h5.File(filename := self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -204,7 +204,7 @@ class Reader(BaseReader):
                 else:
                     raise ValueError(f"Field {c} is not a group in the {filename}")
 
-            keys: list[str] = list(f0.keys())
+            keys: List[str] = list(f0.keys())
             return {c: get_coord(c) for c in keys if re.match(r"^X[1|2|3]$", c)}
 
     @override

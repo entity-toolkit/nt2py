@@ -1,4 +1,4 @@
-from typing import Callable, Any
+from typing import Callable, Any, Union, Optional, List, Dict
 
 import sys
 
@@ -10,7 +10,6 @@ else:
         return method
 
 
-from collections.abc import KeysView
 from nt2.utils import ToHumanReadable
 
 import xarray as xr
@@ -65,6 +64,84 @@ class MoviePlotAccessor(acc_movie.accessor):
     pass
 
 
+# Cartesian remapping functions
+def remap_fields_cart(name: str) -> str:
+    name = name[1:]
+    fieldname = name.split("_")[0]
+    fieldname = fieldname.replace("0", "t")
+    fieldname = fieldname.replace("1", "x")
+    fieldname = fieldname.replace("2", "y")
+    fieldname = fieldname.replace("3", "z")
+    suffix = "_".join(name.split("_")[1:])
+    return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
+
+
+def remap_coords_cart(name: str) -> str:
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+    }.get(name, name)
+
+
+def remap_prtl_quantities_cart(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+        "U1": "ux",
+        "U2": "uy",
+        "U3": "uz",
+        "W": "w",
+    }.get(shortname, shortname)
+
+
+# Spherical remapping functions
+def remap_fields_sph(name: str) -> str:
+    name = name[1:]
+    fieldname = name.split("_")[0]
+    fieldname = fieldname.replace("0", "t")
+    fieldname = fieldname.replace("1", "r")
+    fieldname = fieldname.replace("2", "th")
+    fieldname = fieldname.replace("3", "ph")
+    suffix = "_".join(name.split("_")[1:])
+    return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
+
+
+def remap_coords_sph(name: str) -> str:
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+    }.get(name, name)
+
+
+def remap_prtl_quantities_sph(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+        "U1": "ur",
+        "U2": "uth",
+        "U3": "uph",
+        "W": "w",
+    }.get(shortname, shortname)
+
+
+def compactify(lst: Union[List[Any], Any]) -> str:
+    c = ""
+    cntr = 0
+    for l_ in lst:
+        if cntr > 5:
+            c += "\n|   "
+            cntr = 0
+        c += f"{l_}, "
+        cntr += 1
+    return c[:-2]
+
+
 class Data(Fields, Particles, Spectra):
     """Main class to manage all the data containers.
 
@@ -75,9 +152,9 @@ class Data(Fields, Particles, Spectra):
     def __init__(
         self,
         path: str,
-        reader: BaseReader | None = None,
-        remap: dict[str, Callable[[str], str]] | None = None,
-        coord_system: CoordinateSystem | None = None,
+        reader: Optional[BaseReader] = None,
+        remap: Optional[Dict[str, Callable[[str], str]]] = None,
+        coord_system: Optional[CoordinateSystem] = None,
     ):
         """Initializer for the Data class.
 
@@ -85,12 +162,12 @@ class Data(Fields, Particles, Spectra):
         ----------
         path : str
             Main path to the data
-        reader : BaseReader | None
+        reader : BaseReader, optional
             Reader to use to read the data. If None, it will be determined
             based on the file format.
-        remap : dict[str, Callable[[str], str]] | None
+        remap : dict[str, Callable[[str], str]], optional
             Remap dictionary to use to remap the data names (coords, fields, etc.).
-        coord_system : CoordinateSystem | None
+        coord_system : CoordinateSystem, optional
             Coordinate system of the data. If None, it will be determined
             based on the data attrs (if remap is also None).
 
@@ -120,7 +197,7 @@ class Data(Fields, Particles, Spectra):
             self.__reader = reader
 
         # determine the coordinate system and remapping
-        self.__attrs: dict[str, Any] = {}
+        self.__attrs: Dict[str, Any] = {}
         for category in ["fields", "particles", "spectra"]:
             if self.__reader.DefinesCategory(path, category):
                 valid_steps = self.__reader.GetValidSteps(path, category)
@@ -135,69 +212,8 @@ class Data(Fields, Particles, Spectra):
                     )
                 else:
                     if attrs["Coordinates"] in [b"cart", "cart"]:
-
-                        def remap_fields(name: str) -> str:
-                            name = name[1:]
-                            fieldname = name.split("_")[0]
-                            fieldname = fieldname.replace("0", "t")
-                            fieldname = fieldname.replace("1", "x")
-                            fieldname = fieldname.replace("2", "y")
-                            fieldname = fieldname.replace("3", "z")
-                            suffix = "_".join(name.split("_")[1:])
-                            return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
-
-                        def remap_coords(name: str) -> str:
-                            return {
-                                "X1": "x",
-                                "X2": "y",
-                                "X3": "z",
-                            }.get(name, name)
-
-                        def remap_prtl_quantities(name: str) -> str:
-                            shortname = name[1:]
-                            return {
-                                "X1": "x",
-                                "X2": "y",
-                                "X3": "z",
-                                "U1": "ux",
-                                "U2": "uy",
-                                "U3": "uz",
-                                "W": "w",
-                            }.get(shortname, shortname)
-
                         coord_system = CoordinateSystem.XYZ
-
                     elif attrs["Coordinates"] in [b"sph", "sph", b"qsph", "qsph"]:
-
-                        def remap_fields(name: str) -> str:
-                            name = name[1:]
-                            fieldname = name.split("_")[0]
-                            fieldname = fieldname.replace("0", "t")
-                            fieldname = fieldname.replace("1", "r")
-                            fieldname = fieldname.replace("2", "th")
-                            fieldname = fieldname.replace("3", "ph")
-                            suffix = "_".join(name.split("_")[1:])
-                            return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
-
-                        def remap_coords(name: str) -> str:
-                            return {
-                                "X1": "r",
-                                "X2": "th",
-                                "X3": "ph",
-                            }.get(name, name)
-
-                        def remap_prtl_quantities(name: str) -> str:
-                            shortname = name[1:]
-                            return {
-                                "X1": "r",
-                                "X2": "th",
-                                "X3": "ph",
-                                "U1": "ur",
-                                "U2": "uth",
-                                "U3": "uph",
-                                "W": "w",
-                            }.get(shortname, shortname)
-
                         coord_system = CoordinateSystem.SPH
 
                     else:
@@ -206,9 +222,21 @@ class Data(Fields, Particles, Spectra):
                         )
                     if remap is None:
                         remap = {
-                            "coords": remap_coords,
-                            "fields": remap_fields,
-                            "particles": remap_prtl_quantities,
+                            "coords": (
+                                remap_coords_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_coords_sph
+                            ),
+                            "fields": (
+                                remap_fields_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_fields_sph
+                            ),
+                            "particles": (
+                                remap_prtl_quantities_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_prtl_quantities_sph
+                            ),
                         }
                     break
 
@@ -222,8 +250,8 @@ class Data(Fields, Particles, Spectra):
     def makeMovie(
         self,
         plot: Callable,
-        time: list[float] | None = None,
-        num_cpus: int | None = None,
+        time: Optional[List[float]] = None,
+        num_cpus: Optional[int] = None,
         **movie_kwargs: Any,
     ) -> bool:
         f"""Create animation with provided plot function.
@@ -234,6 +262,10 @@ class Data(Fields, Particles, Spectra):
             A function that takes a single argument (time in physical units) and produces a plot.
         time : array_like, optional
             An array of time values to use for the animation. If not provided, the entire time range will be used.
+        num_cpus : int, optional
+            The number of CPUs to use for parallel processing. If None, it will use all available CPUs.
+        **movie_kwargs : dict
+            Additional keyword arguments to pass to the movie creation function.
         
         Returns
         -------
@@ -272,23 +304,12 @@ class Data(Fields, Particles, Spectra):
         return self.__coordinate_system
 
     @property
-    def attrs(self) -> dict[str, Any]:
+    def attrs(self) -> Dict[str, Any]:
         """dict[str, Any]: The attributes of the data."""
         return self.__attrs
 
     def to_str(self) -> str:
         """str: String representation of the all the enclosed dataframes."""
-
-        def compactify(lst: list[Any] | KeysView[Any]) -> str:
-            c = ""
-            cntr = 0
-            for l_ in lst:
-                if cntr > 5:
-                    c += "\n|   "
-                    cntr = 0
-                c += f"{l_}, "
-                cntr += 1
-            return c[:-2]
 
         string = ""
         if self.fields_defined:
