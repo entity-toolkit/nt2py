@@ -243,6 +243,6 @@ There are unit tests included with the code which also require downloading test 
 - [ ] Interactive regime (`hvplot`, `bokeh`, `panel`)
 - [x] Ghost cells support
 - [x] Usage examples
-- [ ] Parse the log file with timings
+- [x] Parse the log file with timings
 - [x] Raw reader
 - [x] 3.14-compatible parallel output
