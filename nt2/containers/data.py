@@ -13,6 +13,7 @@ else:
 from nt2.utils import ToHumanReadable
 
 import xarray as xr
+import pandas as pd
 
 from nt2.utils import (
     DetermineDataFormat,
@@ -26,6 +27,7 @@ from nt2.readers.adios2 import Reader as BP5Reader
 from nt2.containers.fields import Fields
 from nt2.containers.particles import Particles
 from nt2.containers.spectra import Spectra
+from nt2.containers.diagnostics import Diagnostics
 
 import nt2.plotters.polar as acc_polar
 import nt2.plotters.particles as acc_particles
@@ -246,6 +248,7 @@ class Data(Fields, Particles, Spectra):
         self.__coordinate_system = coord_system
 
         super(Data, self).__init__(path=path, reader=self.__reader, remap=remap)
+        self.__diagnostics = Diagnostics(path)
 
     def makeMovie(
         self,
@@ -307,6 +310,11 @@ class Data(Fields, Particles, Spectra):
     def attrs(self) -> Dict[str, Any]:
         """dict[str, Any]: The attributes of the data."""
         return self.__attrs
+
+    @property
+    def diagnostics(self) -> pd.DataFrame | None:
+        """pd.DataFrame or None: The diagnostics output if .out file is found, None otherwise."""
+        return self.__diagnostics.df
 
     def to_str(self) -> str:
         """str: String representation of the all the enclosed dataframes."""
