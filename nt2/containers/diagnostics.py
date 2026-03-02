@@ -1,8 +1,9 @@
+from typing import Union
 import pandas as pd
 
 
 class Diagnostics:
-    df: pd.DataFrame | None
+    df: Union[pd.DataFrame, None]
 
     def __init__(self, path: str):
         import os

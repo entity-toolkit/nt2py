@@ -312,7 +312,7 @@ class Data(Fields, Particles, Spectra):
         return self.__attrs
 
     @property
-    def diagnostics(self) -> pd.DataFrame | None:
+    def diagnostics(self) -> Union[pd.DataFrame, None]:
         """pd.DataFrame or None: The diagnostics output if .out file is found, None otherwise."""
         return self.__diagnostics.df
 
