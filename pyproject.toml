@@ -1,37 +1,15 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "nt2py"
-dynamic = ["version"]
-dependencies = [
-  "types-setuptools",
-  "typing_extensions",
-  "dask[complete]",
-  "adios2",
-  "bokeh",
-  "xarray",
-  "numpy",
-  "scipy",
-  "matplotlib",
-  "tqdm",
-  "contourpy",
-  "typer",
-  "loky",
-]
-requires-python = ">=3.8"
-authors = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
-maintainers = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
 description = "Post-processing & visualization toolkit for the Entity PIC code"
 readme = "README.md"
-license = { file = "LICENSE" }
+requires-python = ">=3.8"
+license-files = ["LICENSE"]
+authors = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
+maintainers = [{ name = "Hayk", email = "haykh.astro@gmail.com" }]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
-  "Intended Audience :: Science/Research",
   "Intended Audience :: Education",
-  "Topic :: Scientific/Engineering :: Physics",
-  "Topic :: Scientific/Engineering :: Astronomy",
+  "Intended Audience :: Science/Research",
   "License :: OSI Approved :: BSD License",
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.8",
@@ -40,17 +18,41 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Physics",
 ]
-
-[project.optional-dependencies]
-hdf5 = ["h5py"]
-dev = ["black", "pytest"]
+dependencies = [
+  "adios2",
+  "bokeh",
+  "contourpy",
+  "dask[complete]",
+  "loky",
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "scipy",
+  "tqdm",
+  "typer",
+  "types-setuptools",
+  "typing_extensions",
+  "xarray",
+]
+dynamic = ["version"]
 
 [project.urls]
 Repository = "https://github.com/entity-toolkit/nt2py"
 
 [project.scripts]
 nt2 = "nt2.cli.main:app"
+
+[project.optional-dependencies]
+dev = ["black", "pytest"]
+hdf5 = ["h5py"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.hatch.version]
 path = "nt2/__init__.py"
