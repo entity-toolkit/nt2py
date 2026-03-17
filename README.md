@@ -19,9 +19,10 @@ data = nt2.Data("path/to/data")
 The data is stored in specialized containers which can be accessed via corresponding attributes:
 
 ```python
-data.fields     # < xr.Dataset
-data.particles  # < special object which returns a pd.DataFrame when .load() is called
-data.spectra    # < xr.Dataset
+data.fields      # < xr.Dataset
+data.particles   # < special object which returns a pd.DataFrame when .load() is called
+data.spectra     # < xr.Dataset
+data.diagnostics # < pd.DataFrame
 ```
 
 > If using Jupyter notebook, you can quickly preview the loaded metadata by simply running a cell with just `data` in it (or in regular python, by doing `print(data)`).
