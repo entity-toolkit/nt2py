@@ -101,7 +101,10 @@ class Reader(BaseReader):
             if quantity in f.available_variables():
                 var = f.inquire_variable(quantity)
                 if var is not None:
-                    return np.array(f.read(var))
+                    if var.shape() == [0]:
+                        return np.array([])
+                    else:
+                        return np.array(f.read(var))
                 else:
                     raise ValueError(f"{quantity} not found in the {filename}")
             else:
