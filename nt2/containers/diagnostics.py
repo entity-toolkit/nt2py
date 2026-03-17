@@ -76,7 +76,7 @@ class Diagnostics:
                         data["species_min"][specie[0]] = []
                         data["species_max"][specie[0]] = []
                     data["species"][specie[0]].append(int(float(specie[1])))
-                    if len(specie) == 6:
+                    if len(specie) == 6 and specie[3] != "" and specie[5] != "":
                         data["species_min"][specie[0]].append(int(float(specie[3])))
                         data["species_max"][specie[0]].append(int(float(specie[5])))
 
@@ -84,13 +84,11 @@ class Diagnostics:
                     assert len(data["species"][key]) == len(
                         data["steps"]
                     ), f"Number of species entries for {key} does not match number of steps"
-                    assert (
-                        len(data["species_min"][key]) == len(data["steps"])
-                        or len("species_min") == 0
+                    assert (len(data["species_min"][key]) == len(data["steps"])) or (
+                        len(data["species_min"][key]) == 0
                     ), f"Number of species min entries for {key} does not match number of steps"
-                    assert (
-                        len(data["species_max"][key]) == len(data["steps"])
-                        or len("species_max") == 0
+                    assert (len(data["species_max"][key]) == len(data["steps"])) or (
+                        len(data["species_max"][key]) == 0
                     ), f"Number of species max entries for {key} does not match number of steps"
 
             self.df = pd.DataFrame(index=data["steps"])
@@ -100,7 +98,11 @@ class Diagnostics:
                 self.df[key] = data["substeps"][key]
             for key in data["species"].keys():
                 self.df[f"species_{key}"] = data["species"][key]
-                self.df[f"species_{key}_min"] = data["species_min"][key]
-                self.df[f"species_{key}_max"] = data["species_max"][key]
+                if (
+                    len(data["species_min"][key]) > 0
+                    and len(data["species_max"][key]) > 0
+                ):
+                    self.df[f"species_{key}_min"] = data["species_min"][key]
+                    self.df[f"species_{key}_max"] = data["species_max"][key]
 
             del data
