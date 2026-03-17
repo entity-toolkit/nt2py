@@ -1,6 +1,7 @@
 from typing import Callable, Any, Union, Optional, List, Dict
 
 import sys
+import logging
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -248,7 +249,11 @@ class Data(Fields, Particles, Spectra):
         self.__coordinate_system = coord_system
 
         super(Data, self).__init__(path=path, reader=self.__reader, remap=remap)
-        self.__diagnostics = Diagnostics(path)
+        try:
+            self.__diagnostics = Diagnostics(path)
+        except Exception as e:
+            logging.warning(f"Failed to read diagnostics: {e}")
+            self.__diagnostics = None
 
     def makeMovie(
         self,
@@ -314,6 +319,8 @@ class Data(Fields, Particles, Spectra):
     @property
     def diagnostics(self) -> Union[pd.DataFrame, None]:
         """pd.DataFrame or None: The diagnostics output if .out file is found, None otherwise."""
+        if self.__diagnostics is None:
+            return None
         return self.__diagnostics.df
 
     def to_str(self) -> str:
