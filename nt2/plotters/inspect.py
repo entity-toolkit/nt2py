@@ -19,9 +19,10 @@ class ds_accessor:
         nfields: int,
         size: float,
         aspect: float,
-        pad: float,
         **fig_kwargs: Any,
     ) -> Tuple[mfigure.Figure, List[plt.Axes]]:
+        vpad = fig_kwargs.pop("vpad", 0.5)
+        hpad = fig_kwargs.pop("hpad", 0.5)
         if aspect > 1:
             axw = size / aspect
             axh = size
@@ -29,11 +30,11 @@ class ds_accessor:
             axw = size
             axh = size * aspect
 
-        fig_w = ncols * (axw + pad) + pad
-        fig_h = nrows * axh + (nrows + 1) * pad
+        fig_w = ncols * (axw + hpad) + hpad
+        fig_h = nrows * axh + (nrows + 1) * vpad
         fig = plt.figure(figsize=(fig_w, fig_h), **fig_kwargs)
 
-        gs = fig.add_gridspec(nrows, ncols, wspace=pad / axw, hspace=pad / axh)
+        gs = fig.add_gridspec(nrows, ncols, wspace=hpad / axw, hspace=vpad / axh)
         axes = [
             fig.add_subplot(gs[i, j])
             for i in range(nrows)
@@ -58,11 +59,13 @@ class ds_accessor:
         nfields: int,
         size: float,
         aspect: float,
-        pad: float,
         cbar_w: float,
         **fig_kwargs: Any,
     ) -> Tuple[mfigure.Figure, List[plt.Axes]]:
         from mpl_toolkits.axes_grid1 import Divider, Size
+
+        vpad = fig_kwargs.pop("vpad", 0.5)
+        hpad = fig_kwargs.pop("hpad", 0.5)
 
         if aspect > 1:
             axw = size / aspect
@@ -71,19 +74,19 @@ class ds_accessor:
             axw = size
             axh = size * aspect
 
-        fig_w = ncols * (axw + cbar_w + pad) + pad
-        fig_h = nrows * axh + (nrows + 1) * pad
+        fig_w = ncols * (axw + cbar_w + hpad) + hpad
+        fig_h = nrows * axh + (nrows + 1) * vpad
         fig = plt.figure(figsize=(fig_w, fig_h), **fig_kwargs)
 
         h = []
         for _ in range(ncols):
-            h += [Size.Fixed(pad), Size.Fixed(axw), Size.Fixed(cbar_w)]
-        h += [Size.Fixed(pad)]
+            h += [Size.Fixed(hpad), Size.Fixed(axw), Size.Fixed(cbar_w)]
+        h += [Size.Fixed(hpad)]
 
         v = []
         for _ in range(nrows):
-            v += [Size.Fixed(pad), Size.Fixed(axh)]
-        v += [Size.Fixed(pad)]
+            v += [Size.Fixed(vpad), Size.Fixed(axh)]
+        v += [Size.Fixed(vpad)]
 
         divider = Divider(fig, (0, 0, 1, 1), h, v, aspect=False)
         axes: List[plt.Axes] = []
@@ -270,13 +273,14 @@ class ds_accessor:
             "J": None,
             "N": None,
             "T": None,
+            "V": None,
         }
         for fld in fields:
             vmin, vmax = (
                 data[fld].min().values[()],
                 data[fld].max().values[()],
             )
-            if fld[0] in "EBJNT":
+            if fld[0] in "EBJNTV":
                 mm = minmax[fld[0]]
                 if mm is None:
                     minmax[fld[0]] = (vmin, vmax)
@@ -288,7 +292,7 @@ class ds_accessor:
         for f, vv in minmax.items():
             if vv is not None:
                 (vmin, vmax) = vv
-                if vmin < 0 or f in "EBJ":
+                if vmin < 0 or f in "EBJV":
                     if abs(vmin) > vmax:
                         vmax = abs(vmin)
                     else:
@@ -351,18 +355,12 @@ class ds_accessor:
             nfields=nplots,
             size=figsize0,
             aspect=aspect,
-            pad=0.5,
             **fig_kwargs,
         )
         for n, ax in enumerate(axes):
             i = n // ncols
             j = n % ncols
 
-            if j != 0:
-                _ = ax.set(
-                    ylabel=None,
-                    yticklabels=[],
-                )
             if (nplots - i * ncols - j) > ncols:
                 _ = ax.set(
                     xlabel=None,
@@ -560,7 +558,6 @@ class ds_accessor:
             nfields=nfields,
             size=figsize0,
             aspect=aspect,
-            pad=0.5,
             cbar_w=0.1,
             **fig_kwargs,
         )
@@ -569,11 +566,6 @@ class ds_accessor:
             i = n // ncols
             j = n % ncols
 
-            if j != 0:
-                _ = ax.set(
-                    ylabel=None,
-                    yticklabels=[],
-                )
             if (nfields - i * ncols - j) > ncols:
                 _ = ax.set(
                     xlabel=None,
