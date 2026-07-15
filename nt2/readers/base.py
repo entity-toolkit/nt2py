@@ -1,8 +1,65 @@
-from typing import Any, List, Tuple, Dict, Set
+from concurrent.futures import as_completed
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+import os
+import re
+import logging
+
 import numpy.typing as npt
-import os, re, logging
+from loky import get_reusable_executor
+from tqdm import tqdm
 
 from nt2.utils import Format, Layout
+
+
+def _check_file(enter_file: Callable[[str], Any], filename: str) -> None:
+    with enter_file(filename):
+        pass
+
+
+def _get_field_shapes(
+    reader: "BaseReader", path: str, step: int
+) -> Dict[str, Tuple[int, ...]]:
+    names = reader.ReadCategoryNamesAtTimestep(
+        path=path,
+        category="fields",
+        prefix="f",
+        step=step,
+    )
+    return {
+        name: reader.ReadArrayShapeAtTimestep(
+            path=path,
+            category="fields",
+            quantity=name,
+            step=step,
+        )
+        for name in names
+    }
+
+
+def _verify_particle_shapes(reader: "BaseReader", path: str, step: int) -> None:
+    prtl_species = reader.ReadParticleSpeciesAtTimestep(path=path, step=step)
+    quantities = reader.ReadCategoryNamesAtTimestep(
+        path=path,
+        category="particles",
+        prefix="p",
+        step=step,
+    )
+    quantities = set(q.split("_")[0] for q in quantities if q.startswith("p"))
+    for species in prtl_species:
+        shape = None
+        for quantity in quantities:
+            current_shape = reader.ReadArrayShapeAtTimestep(
+                path=path,
+                category="particles",
+                quantity=f"{quantity}_{species}",
+                step=step,
+            )
+            if shape is None:
+                shape = current_shape
+            elif shape != current_shape:
+                raise ValueError(
+                    f"Different particle shapes found in the {reader.format.value} files for species {species} and quantity {quantity} in step {step}"
+                )
 
 
 class BaseReader:
@@ -52,6 +109,7 @@ class BaseReader:
         category: str,
         varname: str,
         newname: str,
+        valid_files: List[str],
     ) -> Dict[str, npt.NDArray[Any]]:
         """Read a variable at each timestep and return a dictionary with the new name.
 
@@ -65,6 +123,8 @@ class BaseReader:
             The name of the variable to be read.
         newname : str
             The new name of the variable to be returned.
+        valid_files : list[str]
+            The valid files to be read.
 
         Returns
         -------
@@ -73,6 +133,33 @@ class BaseReader:
 
         """
         raise NotImplementedError("ReadPerTimestepVariable is not implemented")
+
+    def ReadParticleCountsAtTimestep(
+        self,
+        path: str,
+        step: int,
+        species: List[int],
+    ) -> Dict[int, int]:
+        """Return particle counts by species without reading particle arrays.
+
+        Readers may override this method to collect all counts while opening the
+        timestep only once.  The default implementation uses array-shape
+        metadata and is kept for third-party readers.
+        """
+        counts: Dict[int, int] = {}
+        for sp in species:
+            try:
+                counts[sp] = int(
+                    self.ReadArrayShapeAtTimestep(
+                        path=path,
+                        category="particles",
+                        quantity=f"pX1_{sp}",
+                        step=step,
+                    )[0]
+                )
+            except (IndexError, KeyError, OSError, ValueError):
+                counts[sp] = 0
+        return counts
 
     def ReadAttrsAtTimestep(
         self,
@@ -360,6 +447,7 @@ class BaseReader:
         self,
         path: str,
         category: str,
+        num_cpus: Optional[int] = None,
     ) -> List[int]:
         """Get valid timesteps (sorted) in a given path and category.
 
@@ -369,6 +457,8 @@ class BaseReader:
             The path to the files.
         category : str
             The category of the files.
+        num_cpus : Optional[int]
+            The number of CPU cores to use for parallel processing.
 
         Returns
         -------
@@ -376,16 +466,33 @@ class BaseReader:
             A list of valid timesteps in the given path and category.
 
         """
-        steps: List[int] = []
-        for filename in BaseReader.CategoryFiles(
+        category_files = BaseReader.CategoryFiles(
             path=path,
             category=category,
             format=self.format.value,
+        )
+        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+        executor = get_reusable_executor(max_workers=num_cpus)
+        futures = {
+            executor.submit(
+                _check_file,
+                self.EnterFile,
+                os.path.join(path, category, filename),
+            ): filename
+            for filename in category_files
+        }
+
+        steps: List[int] = []
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc=f"getting valid steps for {category}",
+            leave=False,
         ):
+            filename = futures[future]
             try:
-                with self.EnterFile(os.path.join(path, category, filename)):
-                    step = int(filename.split(".")[1])
-                    steps.append(step)
+                future.result()
+                steps.append(int(filename.split(".")[1]))
             except OSError:
                 if filename not in self.skipped_files:
                     self.skipped_files.append(filename)
@@ -399,6 +506,7 @@ class BaseReader:
         self,
         path: str,
         category: str,
+        num_cpus: Optional[int] = None,
     ) -> List[str]:
         """Get valid files (sorted by timestep) in a given path and category.
 
@@ -408,6 +516,8 @@ class BaseReader:
             The path to the files.
         category : str
             The category of the files.
+        num_cpus : Optional[int]
+            The number of CPU cores to use for parallel processing.
 
         Returns
         -------
@@ -415,15 +525,33 @@ class BaseReader:
             A list of valid files in the given path and category.
 
         """
-        files: List[str] = []
-        for filename in BaseReader.CategoryFiles(
+        category_files = BaseReader.CategoryFiles(
             path=path,
             category=category,
             format=self.format.value,
+        )
+        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+        executor = get_reusable_executor(max_workers=num_cpus)
+        futures = {
+            executor.submit(
+                _check_file,
+                self.EnterFile,
+                os.path.join(path, category, filename),
+            ): filename
+            for filename in category_files
+        }
+
+        files: List[str] = []
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc=f"getting valid files for {category}",
+            leave=False,
         ):
+            filename = futures[future]
             try:
-                with self.EnterFile(os.path.join(path, category, filename)):
-                    files.append(filename)
+                future.result()
+                files.append(filename)
             except OSError:
                 if filename not in self.skipped_files:
                     self.skipped_files.append(filename)
@@ -438,6 +566,8 @@ class BaseReader:
         path: str,
         category: str,
         prefix: str,
+        valid_steps: List[int],
+        num_cpus: Optional[int] = None,
     ):
         """Verify that all files in a given category have the same names.
 
@@ -449,6 +579,10 @@ class BaseReader:
             The category of the files.
         prefix : str
             The prefix of the variables to be read.
+        valid_steps : list[int]
+            The valid timesteps to be checked.
+        num_cpus : Optional[int]
+            The number of CPU cores to use for parallel processing.
 
         Raises
         ------
@@ -456,32 +590,41 @@ class BaseReader:
             If different names are found.
 
         """
-        names = None
-        for step in self.GetValidSteps(
-            path=path,
-            category=category,
+        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+        executor = get_reusable_executor(max_workers=num_cpus)
+        futures = {
+            executor.submit(
+                self.ReadCategoryNamesAtTimestep,
+                path=path,
+                category=category,
+                prefix=prefix,
+                step=step,
+            ): step
+            for step in valid_steps
+        }
+        names_by_step = {}
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc=f"verifying same names for {category}",
+            leave=False,
         ):
+            names_by_step[futures[future]] = future.result()
+
+        names = None
+        for step in valid_steps:
             if names is None:
-                names = self.ReadCategoryNamesAtTimestep(
-                    path=path,
-                    category=category,
-                    prefix=prefix,
-                    step=step,
+                names = names_by_step[step]
+            elif names != names_by_step[step]:
+                raise ValueError(
+                    f"Different field names found in the {self.format.value} files for step {step}"
                 )
-            else:
-                if names != self.ReadCategoryNamesAtTimestep(
-                    path=path,
-                    category=category,
-                    prefix=prefix,
-                    step=step,
-                ):
-                    raise ValueError(
-                        f"Different field names found in the {self.format.value} files for step {step}"
-                    )
 
     def VerifySameFieldShapes(
         self,
         path: str,
+        valid_steps: List[int],
+        num_cpus: Optional[int] = None,
     ):
         """Verify that all fields in a given path have the same shape.
 
@@ -489,6 +632,10 @@ class BaseReader:
         ----------
         path : str
             The path to the files.
+        valid_steps : list[int]
+            The valid timesteps to be checked.
+        num_cpus : Optional[int]
+            The number of CPU cores to use for parallel processing.
 
         Raises
         ------
@@ -496,43 +643,49 @@ class BaseReader:
             If different shapes are found.
 
         """
-        shape = None
-        for step in self.GetValidSteps(
-            path=path,
-            category="fields",
+        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+        executor = get_reusable_executor(max_workers=num_cpus)
+        futures = {
+            executor.submit(_get_field_shapes, self, path, step): step
+            for step in valid_steps
+        }
+        shapes_by_step = {}
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="verifying same shapes for fields",
+            leave=False,
         ):
-            names = self.ReadCategoryNamesAtTimestep(
-                path=path,
-                category="fields",
-                prefix="f",
-                step=step,
-            )
+            shapes_by_step[futures[future]] = future.result()
+
+        shape = None
+        for step in valid_steps:
+            names = set(shapes_by_step[step])
             if shape is None:
                 name = names.pop()
-                shape = self.ReadArrayShapeAtTimestep(
-                    path=path,
-                    category="fields",
-                    quantity=name,
-                    step=step,
-                )
+                shape = shapes_by_step[step][name]
             for name in names:
-                if shape != self.ReadArrayShapeAtTimestep(
-                    path=path,
-                    category="fields",
-                    quantity=name,
-                    step=step,
-                ):
+                if shape != shapes_by_step[step][name]:
                     raise ValueError(
                         f"Different field shapes found in the {self.format.value} files for field {name} in step {step}"
                     )
 
-    def VerifySameFieldLayouts(self, path: str):
+    def VerifySameFieldLayouts(
+        self,
+        path: str,
+        valid_steps: List[int],
+        num_cpus: Optional[int] = None,
+    ):
         """Verify that all timesteps in a given path have the same layout.
 
         Parameters
         ----------
         path : str
             The path to the files.
+        valid_steps : list[int]
+            The valid timesteps to be checked.
+        num_cpus : Optional[int]
+            The number of CPU cores to use for parallel processing.
 
         Raises
         ------
@@ -540,32 +693,50 @@ class BaseReader:
             If different layouts are found.
 
         """
-        layout = None
-        for step in self.GetValidSteps(
-            path=path,
-            category="fields",
+        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+        executor = get_reusable_executor(max_workers=num_cpus)
+        futures = {
+            executor.submit(
+                self.ReadFieldLayoutAtTimestep,
+                path=path,
+                step=step,
+            ): step
+            for step in valid_steps
+        }
+        layouts_by_step = {}
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="verifying same layouts for fields",
+            leave=False,
         ):
-            if layout is None:
-                layout = self.ReadFieldLayoutAtTimestep(
-                    path=path,
-                    step=step,
-                )
-            else:
-                if layout != self.ReadFieldLayoutAtTimestep(
-                    path=path,
-                    step=step,
-                ):
-                    raise ValueError(
-                        f"Different field layouts found in the {self.format.value} files for step {step}"
-                    )
+            layouts_by_step[futures[future]] = future.result()
 
-    def VerifySameParticleShapes(self, path: str):
+        layout = None
+        for step in valid_steps:
+            if layout is None:
+                layout = layouts_by_step[step]
+            elif layout != layouts_by_step[step]:
+                raise ValueError(
+                    f"Different field layouts found in the {self.format.value} files for step {step}"
+                )
+
+    def VerifySameParticleShapes(
+        self,
+        path: str,
+        valid_steps: List[int],
+        num_cpus: Optional[int] = None,
+    ):
         """Verify that all particle quantities in a given path have the same shape at specific timesteps.
 
         Parameters
         ----------
         path : str
             The path to the files.
+        valid_steps : list[int]
+            The valid timesteps to be checked.
+        num_cpus : Optional[int]
+            The number of CPU cores to use for parallel processing.
 
         Raises
         ------
@@ -573,40 +744,21 @@ class BaseReader:
             If different shapes are found.
 
         """
-        for step in self.GetValidSteps(
-            path=path,
-            category="particles",
+        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+        executor = get_reusable_executor(max_workers=num_cpus)
+        futures = [
+            executor.submit(_verify_particle_shapes, self, path, step)
+            for step in valid_steps
+        ]
+        for future in tqdm(
+            as_completed(futures),
+            total=len(futures),
+            desc="verifying same shapes for particles",
+            leave=False,
         ):
-            prtl_species = self.ReadParticleSpeciesAtTimestep(path=path, step=step)
-            quantities = self.ReadCategoryNamesAtTimestep(
-                path=path,
-                category="particles",
-                prefix="p",
-                step=step,
-            )
-            quantities = set(q.split("_")[0] for q in quantities if q.startswith("p"))
-            for sp in prtl_species:
-                shape = None
-                for q in quantities:
-                    if shape is None:
-                        shape = self.ReadArrayShapeAtTimestep(
-                            path=path,
-                            category="particles",
-                            quantity=f"{q}_{sp}",
-                            step=step,
-                        )
-                    else:
-                        if shape != self.ReadArrayShapeAtTimestep(
-                            path=path,
-                            category="particles",
-                            quantity=f"{q}_{sp}",
-                            step=step,
-                        ):
-                            raise ValueError(
-                                f"Different particle shapes found in the {self.format.value} files for species {sp} and quantity {q} in step {step}"
-                            )
+            future.result()
 
-    def DefinesCategory(self, path: str, category: str) -> bool:
+    def DefinesCategory(self, path: str, category: str, valid_files: List[str]) -> bool:
         """Check whether a given category is defined in the path.
 
         Parameters
@@ -622,6 +774,4 @@ class BaseReader:
             True if the category is defined, False otherwise.
 
         """
-        return os.path.exists(os.path.join(path, category)) and (
-            len(self.GetValidFiles(path=path, category=category)) > 0
-        )
+        return os.path.exists(os.path.join(path, category)) and (len(valid_files) > 0)

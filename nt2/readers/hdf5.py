@@ -47,9 +47,9 @@ class Reader(BaseReader):
             if isinstance(f0, h5.Group):
                 return f0
             else:
-                raise ValueError(f"Step0 is not a group in the HDF5 file")
+                raise ValueError("Step0 is not a group in the HDF5 file")
         else:
-            raise ValueError(f"Wrong structure of the hdf5 file")
+            raise ValueError("Wrong structure of the hdf5 file")
 
     @property
     @override
@@ -71,13 +71,11 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
+        valid_files: List[str],
     ) -> Dict[str, npt.NDArray[Any]]:
         variables: List[Any] = []
         h5 = _require_h5py()
-        for filename in self.GetValidFiles(
-            path=path,
-            category=category,
-        ):
+        for filename in valid_files:
             with h5.File(os.path.join(path, category, filename), "r") as f:
                 f0 = Reader.__extract_step0(f)
                 if varname in f0.keys():
@@ -92,6 +90,22 @@ class Reader(BaseReader):
                     raise ValueError(f"{varname} not found in the HDF5 file {filename}")
 
         return {newname: np.array(variables)}
+
+    @override
+    def ReadParticleCountsAtTimestep(
+        self, path: str, step: int, species: List[int]
+    ) -> Dict[int, int]:
+        """Read all per-species counts from one HDF5 file's metadata."""
+        h5 = _require_h5py()
+        with h5.File(self.FullPath(path, "particles", step), "r") as f:
+            f0 = Reader.__extract_step0(f)
+            return {
+                sp: int(f0[name].shape[0])
+                if (name := f"pX1_{sp}") in f0
+                and isinstance(f0[name], h5.Dataset)
+                else 0
+                for sp in species
+            }
 
     @override
     def ReadAttrsAtTimestep(

@@ -41,12 +41,10 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
+        valid_files: List[str],
     ) -> Dict[str, npt.NDArray[Any]]:
         variables: List[float] = []
-        for filename in self.GetValidFiles(
-            path=path,
-            category=category,
-        ):
+        for filename in valid_files:
             with bp.FileReader(os.path.join(path, category, filename)) as f:
                 avail: Dict[str, Any] = f.available_variables()
                 vars: List[str] = list(avail.keys())
@@ -61,6 +59,21 @@ class Reader(BaseReader):
                 else:
                     raise ValueError(f"{varname} not found in the BP file {filename}")
         return {newname: np.array(variables)}
+
+    @override
+    def ReadParticleCountsAtTimestep(
+        self, path: str, step: int, species: List[int]
+    ) -> Dict[int, int]:
+        """Read all per-species counts from one BP file's metadata."""
+        with bp.FileReader(self.FullPath(path, "particles", step)) as f:
+            available = f.available_variables()
+            counts: Dict[int, int] = {}
+            for sp in species:
+                name = f"pX1_{sp}"
+                var = f.inquire_variable(name) if name in available else None
+                shape = var.shape() if var is not None else []
+                counts[sp] = int(shape[0]) if shape else 0
+            return counts
 
     @override
     def ReadEdgeCoordsAtTimestep(
