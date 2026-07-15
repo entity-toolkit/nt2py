@@ -1,0 +1,420 @@
+from typing import Callable, Any, Union, Optional, List, Dict
+
+import sys
+import logging
+
+if sys.version_info >= (3, 12):
+    from typing import override
+else:
+
+    def override(method):
+        return method
+
+
+from nt2.utils import ToHumanReadable
+
+import xarray as xr
+import pandas as pd
+
+from nt2.utils import (
+    DetermineDataFormat,
+    InheritClassDocstring,
+    Format,
+    CoordinateSystem,
+)
+from nt2.readers.base import BaseReader
+from nt2.readers.hdf5 import Reader as HDF5Reader
+from nt2.readers.adios2 import Reader as BP5Reader
+from nt2.containers.fields import Fields
+from nt2.containers.particles import Particles
+from nt2.containers.spectra import Spectra
+from nt2.containers.diagnostics import Diagnostics
+
+import nt2.plotters.polar as acc_polar
+import nt2.plotters.particles as acc_particles
+import nt2.plotters.inspect as acc_inspect
+import nt2.plotters.movie as acc_movie
+from nt2.plotters.export import makeFramesAndMovie
+
+
+@xr.register_dataset_accessor("polar")
+@InheritClassDocstring
+class DatasetPolarPlotAccessor(acc_polar.ds_accessor):
+    pass
+
+
+@xr.register_dataset_accessor("particles")
+@InheritClassDocstring
+class DatasetParticlesPlotAccessor(acc_particles.ds_accessor):
+    pass
+
+
+@xr.register_dataarray_accessor("polar")
+@InheritClassDocstring
+class PolarPlotAccessor(acc_polar.accessor):
+    pass
+
+
+@xr.register_dataset_accessor("inspect")
+@InheritClassDocstring
+class DatasetInspectPlotAccessor(acc_inspect.ds_accessor):
+    pass
+
+
+@xr.register_dataarray_accessor("movie")
+@InheritClassDocstring
+class MoviePlotAccessor(acc_movie.accessor):
+    pass
+
+
+# Cartesian remapping functions
+def remap_fields_cart(name: str) -> str:
+    name = name[1:]
+    fieldname = name.split("_")[0]
+    fieldname = fieldname.replace("0", "t")
+    fieldname = fieldname.replace("1", "x")
+    fieldname = fieldname.replace("2", "y")
+    fieldname = fieldname.replace("3", "z")
+    suffix = "_".join(name.split("_")[1:])
+    return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
+
+
+def remap_coords_cart(name: str) -> str:
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+    }.get(name, name)
+
+
+def remap_prtl_quantities_cart(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+        "U1": "ux",
+        "U2": "uy",
+        "U3": "uz",
+        "W": "w",
+    }.get(shortname, shortname)
+
+
+# Spherical remapping functions
+def remap_fields_sph(name: str) -> str:
+    name = name[1:]
+    fieldname = name.split("_")[0]
+    fieldname = fieldname.replace("0", "t")
+    fieldname = fieldname.replace("1", "r")
+    fieldname = fieldname.replace("2", "th")
+    fieldname = fieldname.replace("3", "ph")
+    suffix = "_".join(name.split("_")[1:])
+    return f"{fieldname}{'_' + suffix if suffix != '' else ''}"
+
+
+def remap_coords_sph(name: str) -> str:
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+    }.get(name, name)
+
+
+def remap_prtl_quantities_sph(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+        "U1": "ur",
+        "U2": "uth",
+        "U3": "uph",
+        "W": "w",
+    }.get(shortname, shortname)
+
+
+def compactify(lst: Union[List[Any], Any]) -> str:
+    c = ""
+    cntr = 0
+    for l_ in lst:
+        if cntr > 5:
+            c += "\n|   "
+            cntr = 0
+        c += f"{l_}, "
+        cntr += 1
+    return c[:-2]
+
+
+class Data(Fields, Particles, Spectra):
+    """Main class to manage all the data containers.
+
+    Inherits from all category-specific containers.
+
+    """
+
+    __reader: BaseReader
+    __diagnostics: Optional[Diagnostics]
+
+    def __init__(
+        self,
+        path: str,
+        reader: Optional[BaseReader] = None,
+        remap: Optional[Dict[str, Callable[[str], str]]] = None,
+        coord_system: Optional[CoordinateSystem] = None,
+    ):
+        """Initializer for the Data class.
+
+        Parameters
+        ----------
+        path : str
+            Main path to the data
+        reader : BaseReader, optional
+            Reader to use to read the data. If None, it will be determined
+            based on the file format.
+        remap : dict[str, Callable[[str], str]], optional
+            Remap dictionary to use to remap the data names (coords, fields, etc.).
+        coord_system : CoordinateSystem, optional
+            Coordinate system of the data. If None, it will be determined
+            based on the data attrs (if remap is also None).
+
+        Raises
+        ------
+        NotImplementedError
+            If the data format or coordinate system support is not implemented.
+        ValueError
+            If the reader format does not match the data format or if coordinate system cannot be inferred.
+        """
+        # determine the reader from the format
+        fmt = DetermineDataFormat(path)
+        if reader is None:
+            if fmt == Format.HDF5:
+                self.__reader = HDF5Reader()
+            elif fmt == Format.BP5:
+                self.__reader = BP5Reader()
+            else:
+                raise NotImplementedError(
+                    "Only HDF5 & BP5 formats are supported at the moment."
+                )
+        else:
+            if fmt != reader.format:
+                raise ValueError(
+                    f"Reader format {reader.format} does not match data format {fmt}."
+                )
+            self.__reader = reader
+
+        # determine valid files & steps for each category
+        for category in ["fields", "particles", "spectra"]:
+            self.valid_files[category] = self.__reader.GetValidFiles(
+                path=path, category=category
+            )
+            if self.__reader.DefinesCategory(
+                path, category, self.valid_files[category]
+            ):
+                self.valid_steps[category] = self.__reader.GetValidSteps(
+                    path=path, category=category
+                )
+                if len(self.valid_steps[category]) == 0:
+                    raise ValueError(f"No valid steps found for category {category}.")
+
+        # determine the coordinate system and remapping
+        self.__attrs: Dict[str, Any] = {}
+        for category in ["fields", "particles", "spectra"]:
+            if (
+                category in self.valid_files
+                and len(self.valid_files[category]) > 0
+                and category in self.valid_steps
+                and len(self.valid_steps[category]) > 0
+            ):
+                first_step = self.valid_steps[category][0]
+                attrs = self.__reader.ReadAttrsAtTimestep(path, category, first_step)
+                self.__attrs.update(**attrs)
+                if "Coordinates" not in attrs:
+                    raise ValueError(
+                        f"Coordinates not found in attributes for category {category}."
+                    )
+                else:
+                    if attrs["Coordinates"] in [b"cart", "cart"]:
+                        coord_system = CoordinateSystem.XYZ
+                    elif attrs["Coordinates"] in [b"sph", "sph", b"qsph", "qsph"]:
+                        coord_system = CoordinateSystem.SPH
+
+                    else:
+                        raise NotImplementedError(
+                            f"Coordinate system {attrs['Coordinates']} not supported."
+                        )
+                    if remap is None:
+                        remap = {
+                            "coords": (
+                                remap_coords_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_coords_sph
+                            ),
+                            "fields": (
+                                remap_fields_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_fields_sph
+                            ),
+                            "particles": (
+                                remap_prtl_quantities_cart
+                                if coord_system == CoordinateSystem.XYZ
+                                else remap_prtl_quantities_sph
+                            ),
+                        }
+                    break
+
+        if coord_system is None:
+            raise ValueError("No coordinate system found in the data.")
+
+        self.__coordinate_system = coord_system
+
+        super(Data, self).__init__(path=path, reader=self.__reader, remap=remap)
+        try:
+            self.__diagnostics = Diagnostics(path)
+        except Exception as e:
+            logging.warning(f"Failed to read diagnostics: {e}")
+            self.__diagnostics = None
+
+    def makeMovie(
+        self,
+        plot: Callable,
+        time: Optional[List[float]] = None,
+        num_cpus: Optional[int] = None,
+        **movie_kwargs: Any,
+    ) -> bool:
+        """Create animation with provided plot function.
+
+        Parameters
+        ----------
+        plot : callable
+            A function that takes a single argument (time in physical units) and produces a plot.
+        time : array_like, optional
+            An array of time values to use for the animation. If not provided, the entire time range will be used.
+        num_cpus : int, optional
+            The number of CPUs to use for parallel processing. If None, it will use all available CPUs.
+        **movie_kwargs : dict
+            Additional keyword arguments to pass to the movie creation function.
+
+        Returns
+        -------
+        bool
+            True if the movie was created successfully, False otherwise.
+        """
+        if time is None:
+            if self.fields_defined:
+                time = self.fields.t.values
+            elif self.particles_defined and self.particles is not None:
+                time = list(self.particles.times)
+            else:
+                raise ValueError("No time values found.")
+        assert time is not None, "Time values must be provided."
+        name: str = ""
+        if self.attrs.get("simulation.name", None) is None:
+            name = movie_kwargs.pop("name", "movie")
+        else:
+            name_b = self.attrs.get("simulation.name")
+            if isinstance(name_b, bytes):
+                name = name_b.decode("utf-8")
+            else:
+                name = str(name_b)
+        return makeFramesAndMovie(
+            name=name,
+            data=self,
+            plot=plot,
+            times=time,
+            num_cpus=num_cpus,
+            **movie_kwargs,
+        )
+
+    @property
+    def coordinate_system(self) -> CoordinateSystem:
+        """CoordinateSystem: The coordinate system of the data."""
+        return self.__coordinate_system
+
+    @property
+    def attrs(self) -> Dict[str, Any]:
+        """dict[str, Any]: The attributes of the data."""
+        return self.__attrs
+
+    @property
+    def diagnostics(self) -> Union[pd.DataFrame, None]:
+        """pd.DataFrame or None: The diagnostics output if .out file is found, None otherwise."""
+        if self.__diagnostics is None:
+            return None
+        return self.__diagnostics.df
+
+    def to_str(self) -> str:
+        """str: String representation of the all the enclosed dataframes."""
+
+        string = ""
+        if self.fields_defined:
+            string += "FieldsDataset:\n"
+            string += "==============\n"
+            string += f"| Coordinates:\n|   {self.coordinate_system.value}\n|\n"
+            string += f"| Data axes:\n|   {compactify(self.fields.indexes.keys())}\n|\n"
+            delta_t = (
+                self.fields.coords["t"].values[1] - self.fields.coords["t"].values[0]
+            ) / (self.fields.coords["s"].values[1] - self.fields.coords["s"].values[0])
+            string += f"|   - dt: {delta_t:.2e}\n"
+            for key in self.fields.coords.keys():
+                crd = self.fields.coords[key].values
+                fmt = ""
+                if key != "s":
+                    fmt = ".2f"
+                string += f"|   - {key}: {crd.min():{fmt}} -> {crd.max():{fmt}} [{len(crd)}]\n"
+            string += "|\n"
+            string += f"| Quantities:\n|   {compactify(sorted(map(str, self.fields.data_vars.keys())))}\n|\n"
+            string += f"| Total size: {ToHumanReadable(self.fields.nbytes)}\n\n"
+        else:
+            string += "FieldsDataset:\n"
+            string += "==============\n"
+            string += "  empty\n\n"
+        if self.particles_defined and self.particles is not None:
+            species = sorted(self.particles.species)
+            string += "ParticleDataset:\n"
+            string += "================\n"
+            string += f"| Species:\n|   {compactify(species)}\n|\n"
+            string += f"| Timesteps:\n|   {len(self.particles.times)}\n|\n"
+            string += f"| Quantities:\n|   {compactify(self.particles.columns)}\n|\n"
+            string += f"| Total size: {ToHumanReadable(self.particles.nbytes)}\n|\n"
+            string += self.help_particles("| ")
+            string += "\n"
+        else:
+            string += "ParticleDataset:\n"
+            string += "================\n"
+            string += "  empty\n\n"
+        if self.spectra_defined and self.spectra is not None:
+            string += "SpectraDataset:\n"
+            string += "===============\n"
+            string += (
+                f"| Data axes:\n|   {compactify(self.spectra.indexes.keys())}\n|\n"
+            )
+            delta_t = (
+                self.spectra.coords["t"].values[1] - self.spectra.coords["t"].values[0]
+            ) / (
+                self.spectra.coords["s"].values[1] - self.spectra.coords["s"].values[0]
+            )
+            string += f"|   - dt: {delta_t:.2e}\n"
+            for key in self.spectra.coords.keys():
+                crd = self.spectra.coords[key].values
+                fmt = ""
+                if key != "s":
+                    fmt = ".2f"
+                string += f"|   - {key}: {crd.min():{fmt}} -> {crd.max():{fmt}} [{len(crd)}]\n"
+            string += "|\n"
+            string += f"| Quantities:\n|   {compactify(sorted(map(str, self.spectra.data_vars.keys())))}\n|\n"
+            string += f"| Total size: {ToHumanReadable(self.spectra.nbytes)}\n|\n"
+            string += self.help_spectra("| ")
+        else:
+            string += "SpectraDataset:\n"
+            string += "===============\n"
+            string += "  empty\n\n"
+
+        return string
+
+    @override
+    def __str__(self) -> str:
+        return self.to_str()
+
+    @override
+    def __repr__(self) -> str:
+        return self.to_str()
