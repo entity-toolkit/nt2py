@@ -92,23 +92,20 @@ def test_reader(test):
                 OSError,
             )
 
-        valid_files = reader.GetValidFiles(path=PATH, category="fields")
+        valid_files, valid_steps = reader.GetValidFilesAndSteps(
+            path=PATH, category="fields"
+        )
 
         # Check that timesteps are read correctly from fields
-        times = reader.ReadPerTimestepVariable(
+        timestep_variables = reader.ReadPerTimestepVariables(
             path=PATH,
             category="fields",
-            varname="Time",
-            newname="t",
+            varnames=["Time", "Step"],
+            newnames=["t", "s"],
             valid_files=valid_files,
-        )["t"]
-        steps = reader.ReadPerTimestepVariable(
-            path=PATH,
-            category="fields",
-            varname="Step",
-            newname="s",
-            valid_files=valid_files,
-        )["s"]
+        )
+        times = timestep_variables["t"]
+        steps = timestep_variables["s"]
         check_equal_arrays(
             times,
             np.array([s * dt for s in steps]),
@@ -149,7 +146,6 @@ def test_reader(test):
                 shape, (nx1, nx2, nx3) if layout == Layout.R else (nx3, nx2, nx1)
             )
 
-        valid_steps = reader.GetValidSteps(path=PATH, category="fields")
         for step in valid_steps:
             for f in field_names:
                 field = reader.ReadArrayAtTimestep(
@@ -203,22 +199,19 @@ def test_reader(test):
         )
         prtl_names = set(f"p{p}" for p in prtl_names)
 
-        valid_files = reader.GetValidFiles(path=PATH, category="particles")
+        valid_files, valid_steps = reader.GetValidFilesAndSteps(
+            path=PATH, category="particles"
+        )
         # Check that timesteps are read correctly from particles
-        times = reader.ReadPerTimestepVariable(
+        timestep_variables = reader.ReadPerTimestepVariables(
             path=PATH,
             category="particles",
-            varname="Time",
-            newname="t",
+            varnames=["Time", "Step"],
+            newnames=["t", "s"],
             valid_files=valid_files,
-        )["t"]
-        steps = reader.ReadPerTimestepVariable(
-            path=PATH,
-            category="particles",
-            varname="Step",
-            newname="s",
-            valid_files=valid_files,
-        )["s"]
+        )
+        times = timestep_variables["t"]
+        steps = timestep_variables["s"]
 
         if dt is not None:
             check_equal_arrays(
@@ -234,7 +227,7 @@ def test_reader(test):
         check_equal_arrays(names, prtl_names)
 
         # Check prtl shapes
-        for step in reader.GetValidSteps(path=PATH, category="particles"):
+        for step in valid_steps:
             for sp in range(nspec):
                 reader.ReadArrayShapeAtTimestep(
                     path=PATH,

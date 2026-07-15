@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, TYPE_CHECKING, List, Dict, Tuple, Set
 
 import sys
+from tqdm import tqdm
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -75,7 +76,12 @@ class Reader(BaseReader):
     ) -> Dict[str, npt.NDArray[Any]]:
         variables: List[Any] = []
         h5 = _require_h5py()
-        for filename in valid_files:
+        for filename in tqdm(
+            valid_files,
+            desc=f"Reading {category}/{varname}",
+            position=0,
+            leave=False,
+        ):
             with h5.File(os.path.join(path, category, filename), "r") as f:
                 f0 = Reader.__extract_step0(f)
                 if varname in f0.keys():
@@ -92,6 +98,41 @@ class Reader(BaseReader):
         return {newname: np.array(variables)}
 
     @override
+    def ReadPerTimestepVariables(
+        self,
+        path: str,
+        category: str,
+        varnames: List[str],
+        newnames: List[str],
+        valid_files: List[str],
+    ) -> Dict[str, npt.NDArray[Any]]:
+        variables = {newname: [] for newname in newnames}
+        h5 = _require_h5py()
+        for filename in tqdm(
+            valid_files,
+            desc=f"Reading {category} {varnames}",
+            position=0,
+            leave=False,
+        ):
+            with h5.File(os.path.join(path, category, filename), "r") as f:
+                f0 = Reader.__extract_step0(f)
+                for varname, newname in zip(varnames, newnames):
+                    if varname in f0.keys():
+                        var = f0[varname]
+                        if isinstance(var, h5.Dataset):
+                            variables[newname].append(var[()])
+                        else:
+                            raise ValueError(
+                                f"{varname} is not a group in the HDF5 file {filename}"
+                            )
+                    else:
+                        raise ValueError(
+                            f"{varname} not found in the HDF5 file {filename}"
+                        )
+
+        return {newname: np.array(variables[newname]) for newname in newnames}
+
+    @override
     def ReadParticleCountsAtTimestep(
         self, path: str, step: int, species: List[int]
     ) -> Dict[int, int]:
@@ -101,8 +142,7 @@ class Reader(BaseReader):
             f0 = Reader.__extract_step0(f)
             return {
                 sp: int(f0[name].shape[0])
-                if (name := f"pX1_{sp}") in f0
-                and isinstance(f0[name], h5.Dataset)
+                if (name := f"pX1_{sp}") in f0 and isinstance(f0[name], h5.Dataset)
                 else 0
                 for sp in species
             }

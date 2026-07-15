@@ -82,7 +82,9 @@ def test_fields(test, field_container: Union[Type[Data], Type[FieldContainer]]):
             num_cpus=1,
         )
 
-    steps = reader.GetValidSteps(path=path, category="fields", num_cpus=1)
+    _, steps = reader.GetValidFilesAndSteps(
+        path=path, category="fields", num_cpus=1
+    )
     nx1 = test["fields"]["nx1"]
     nx2 = test["fields"]["nx2"]
     assert fields.fields is not None, "Fields are None"

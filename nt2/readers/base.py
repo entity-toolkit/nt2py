@@ -1,5 +1,5 @@
 from concurrent.futures import as_completed
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import os
 import re
 import logging
@@ -133,6 +133,37 @@ class BaseReader:
 
         """
         raise NotImplementedError("ReadPerTimestepVariable is not implemented")
+
+    def ReadPerTimestepVariables(
+        self,
+        path: str,
+        category: str,
+        varnames: List[str],
+        newnames: List[str],
+        valid_files: List[str],
+    ) -> Dict[str, npt.NDArray[Any]]:
+        """Read multiple variables at each timestep and return a dictionary with the new names.
+
+        Parameters
+        ----------
+        path : str
+            The path to the files.
+        category : str
+            The category of the files.
+        varnames : list[str]
+            The names of the variables to be read.
+        newnames : list[str]
+            The new names of the variables to be returned.
+        valid_files : list[str]
+            The valid files to be read.
+
+        Returns
+        -------
+        dict[str, NDArray[Any]]
+            A dictionary with the new names and the variables at each timestep.
+
+        """
+        raise NotImplementedError("ReadPerTimestepVariables is not implemented")
 
     def ReadParticleCountsAtTimestep(
         self,
@@ -443,13 +474,73 @@ class BaseReader:
             path, category, f"{category}.{step:08d}.{self.format.value}"
         )
 
-    def GetValidSteps(
+    # def GetValidSteps(
+    #     self,
+    #     path: str,
+    #     category: str,
+    #     num_cpus: Optional[int] = None,
+    # ) -> List[int]:
+    #     """Get valid timesteps (sorted) in a given path and category.
+
+    #     Parameters
+    #     ----------
+    #     path : str
+    #         The path to the files.
+    #     category : str
+    #         The category of the files.
+    #     num_cpus : Optional[int]
+    #         The number of CPU cores to use for parallel processing.
+
+    #     Returns
+    #     -------
+    #     list[int]
+    #         A list of valid timesteps in the given path and category.
+
+    #     """
+    #     category_files = BaseReader.CategoryFiles(
+    #         path=path,
+    #         category=category,
+    #         format=self.format.value,
+    #     )
+    #     num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
+    #     executor = get_reusable_executor(max_workers=num_cpus)
+    #     futures = {
+    #         executor.submit(
+    #             _check_file,
+    #             self.EnterFile,
+    #             os.path.join(path, category, filename),
+    #         ): filename
+    #         for filename in category_files
+    #     }
+
+    #     steps: List[int] = []
+    #     for future in tqdm(
+    #         as_completed(futures),
+    #         total=len(futures),
+    #         desc=f"getting valid steps for {category}",
+    #         leave=False,
+    #     ):
+    #         filename = futures[future]
+    #         try:
+    #             future.result()
+    #             steps.append(int(filename.split(".")[1]))
+    #         except OSError:
+    #             if filename not in self.skipped_files:
+    #                 self.skipped_files.append(filename)
+    #                 logging.warning(f"Could not read {filename}, skipping it")
+    #         except Exception as e:
+    #             raise e
+    #     steps.sort()
+    #     return steps
+
+    def GetValidFilesAndSteps(
         self,
         path: str,
         category: str,
+        steprange: Optional[Tuple[Union[int, None], Union[int, None]]] = None,
         num_cpus: Optional[int] = None,
-    ) -> List[int]:
-        """Get valid timesteps (sorted) in a given path and category.
+    ) -> Tuple[List[str], List[int]]:
+        """Get valid files (sorted by timestep) and steps in a given path and category.
 
         Parameters
         ----------
@@ -457,13 +548,15 @@ class BaseReader:
             The path to the files.
         category : str
             The category of the files.
+        steprange : Optional[tuple[int | None, int | None]]
+            The range of timesteps to be considered. If None, all timesteps are considered.
         num_cpus : Optional[int]
             The number of CPU cores to use for parallel processing.
 
         Returns
         -------
-        list[int]
-            A list of valid timesteps in the given path and category.
+        tuple[list[str], list[int]]
+            A tuple containing a list of valid files and a list of valid timesteps in the given path and category.
 
         """
         category_files = BaseReader.CategoryFiles(
@@ -473,6 +566,18 @@ class BaseReader:
         )
         num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
         executor = get_reusable_executor(max_workers=num_cpus)
+
+        def is_inrange(filename: str) -> bool:
+            step = int(filename.split(".")[1])
+            if steprange is None:
+                return True
+            start, end = steprange
+            if start is not None and step < start:
+                return False
+            if end is not None and step >= end:
+                return False
+            return True
+
         futures = {
             executor.submit(
                 _check_file,
@@ -480,18 +585,21 @@ class BaseReader:
                 os.path.join(path, category, filename),
             ): filename
             for filename in category_files
+            if is_inrange(filename)
         }
 
+        files: List[str] = []
         steps: List[int] = []
         for future in tqdm(
             as_completed(futures),
             total=len(futures),
-            desc=f"getting valid steps for {category}",
+            desc=f"getting valid files & steps for {category}",
             leave=False,
         ):
             filename = futures[future]
             try:
                 future.result()
+                files.append(filename)
                 steps.append(int(filename.split(".")[1]))
             except OSError:
                 if filename not in self.skipped_files:
@@ -499,67 +607,9 @@ class BaseReader:
                     logging.warning(f"Could not read {filename}, skipping it")
             except Exception as e:
                 raise e
-        steps.sort()
-        return steps
-
-    def GetValidFiles(
-        self,
-        path: str,
-        category: str,
-        num_cpus: Optional[int] = None,
-    ) -> List[str]:
-        """Get valid files (sorted by timestep) in a given path and category.
-
-        Parameters
-        ----------
-        path : str
-            The path to the files.
-        category : str
-            The category of the files.
-        num_cpus : Optional[int]
-            The number of CPU cores to use for parallel processing.
-
-        Returns
-        -------
-        list[str]
-            A list of valid files in the given path and category.
-
-        """
-        category_files = BaseReader.CategoryFiles(
-            path=path,
-            category=category,
-            format=self.format.value,
-        )
-        num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
-        executor = get_reusable_executor(max_workers=num_cpus)
-        futures = {
-            executor.submit(
-                _check_file,
-                self.EnterFile,
-                os.path.join(path, category, filename),
-            ): filename
-            for filename in category_files
-        }
-
-        files: List[str] = []
-        for future in tqdm(
-            as_completed(futures),
-            total=len(futures),
-            desc=f"getting valid files for {category}",
-            leave=False,
-        ):
-            filename = futures[future]
-            try:
-                future.result()
-                files.append(filename)
-            except OSError:
-                if filename not in self.skipped_files:
-                    self.skipped_files.append(filename)
-                    logging.warning(f"Could not read {filename}, skipping it")
-            except Exception as e:
-                raise e
         files.sort(key=lambda x: int(x.split(".")[1]))
-        return files
+        steps.sort()
+        return (files, steps)
 
     def VerifySameCategoryNames(
         self,

@@ -1,6 +1,7 @@
 from typing import Any, List, Dict, Tuple, Set
 
 import sys
+from tqdm import tqdm
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -44,7 +45,12 @@ class Reader(BaseReader):
         valid_files: List[str],
     ) -> Dict[str, npt.NDArray[Any]]:
         variables: List[float] = []
-        for filename in valid_files:
+        for filename in tqdm(
+            valid_files,
+            desc=f"Reading {category} {varname}",
+            position=0,
+            leave=False,
+        ):
             with bp.FileReader(os.path.join(path, category, filename)) as f:
                 avail: Dict[str, Any] = f.available_variables()
                 vars: List[str] = list(avail.keys())
@@ -59,6 +65,38 @@ class Reader(BaseReader):
                 else:
                     raise ValueError(f"{varname} not found in the BP file {filename}")
         return {newname: np.array(variables)}
+
+    @override
+    def ReadPerTimestepVariables(
+        self,
+        path: str,
+        category: str,
+        varnames: List[str],
+        newnames: List[str],
+        valid_files: List[str],
+    ) -> Dict[str, npt.NDArray[Any]]:
+        variables = {newname: [] for newname in newnames}
+        for filename in tqdm(
+            valid_files,
+            desc=f"Reading {category} {varnames}",
+            position=0,
+            leave=False,
+        ):
+            with bp.FileReader(os.path.join(path, category, filename)) as f:
+                avail: Dict[str, Any] = f.available_variables()
+                vars: List[str] = list(avail.keys())
+                for varname, newname in zip(varnames, newnames):
+                    if varname in vars:
+                        var = f.inquire_variable(varname)
+                        if var is not None:
+                            variables[newname].append(f.read(var))
+                        else:
+                            raise ValueError(
+                                f"{varname} is not a variable in the BP file {filename}"
+                            )
+                    else:
+                        raise ValueError(f"{varname} not found in the BP file {filename}")
+        return {newname: np.array(variables[newname]) for newname in newnames}
 
     @override
     def ReadParticleCountsAtTimestep(

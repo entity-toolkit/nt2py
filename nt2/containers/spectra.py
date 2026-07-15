@@ -16,17 +16,7 @@ class SpectraContainer(BaseContainer):
     __spectra: Union[xr.Dataset, None] = None
 
     def __init__(self, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
-        self.valid_files = self.reader.GetValidFiles(
-            path=self.path,
-            category="spectra",
-            num_cpus=self.num_cpus,
-        )
-        self.valid_steps = self.reader.GetValidSteps(
-            path=self.path,
-            category="spectra",
-            num_cpus=self.num_cpus,
-        )
+        super().__init__(category="spectra", **kwargs)
 
         if self.reader.DefinesCategory(
             self.path,
@@ -84,20 +74,6 @@ class SpectraContainer(BaseContainer):
         shape = self.reader.ReadArrayShapeExplicitlyAtTimestep(
             self.path, "spectra", first_spectrum_name, first_step
         )
-        times = self.reader.ReadPerTimestepVariable(
-            self.path,
-            "spectra",
-            "Time",
-            "t",
-            self.valid_files,
-        )
-        steps = self.reader.ReadPerTimestepVariable(
-            self.path,
-            "spectra",
-            "Step",
-            "s",
-            self.valid_files,
-        )
 
         ebins = self.reader.ReadArrayAtTimestep(
             self.path, "spectra", ebin_name, first_step
@@ -109,8 +85,8 @@ class SpectraContainer(BaseContainer):
         else:
             ebins = (ebins[1:] * ebins[:-1]) ** 0.5
 
-        all_dims = {**times, "E": ebins}
-        all_coords = {**all_dims, "s": ("t", steps["s"])}
+        all_dims = {"t": self.times, "E": ebins}
+        all_coords = {**all_dims, "s": ("t", self.steps)}
 
         attributes = self.reader.ReadAttrsAtTimestep(
             path=self.path, category="spectra", step=first_step
@@ -145,7 +121,10 @@ class SpectraContainer(BaseContainer):
                     coords=all_coords,
                 )
                 for spectrum in tqdm(
-                    spectra_names, desc="spectra", position=0, leave=False
+                    spectra_names,
+                    desc="spectra",
+                    position=0,
+                    leave=False,
                 )
             },
             attrs=attributes,

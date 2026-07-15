@@ -49,8 +49,39 @@ class ParticleContainer(BaseContainer):
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
+        particles = state.get("_ParticleContainer__particles")
+        if particles is not None:
+            state["_ParticleContainer__particle_dataset_state"] = {
+                "species": particles.species,
+                "steps": particles.steps,
+                "times": particles.times,
+                "colnames": particles.colnames,
+                "fprec": particles.fprec,
+                "selection": particles.selection,
+                "partition_lengths": particles._partition_lengths,
+            }
         state.pop("_ParticleContainer__particles", None)
         return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        particle_dataset_state = state.pop(
+            "_ParticleContainer__particle_dataset_state", None
+        )
+        self.__dict__.update(state)
+        if self.__particles_defined:
+            if particle_dataset_state is None:
+                (
+                    self.quantities,
+                    self.sp_with_idx,
+                    self.sp_without_idx,
+                    self.attributes,
+                    self.__particles,
+                ) = self._read_particles()
+            else:
+                self.__particles = ParticleDataset(
+                    **particle_dataset_state,
+                    read_column=self._read_column,
+                )
 
     def __init__(self, **kwargs: Any) -> None:
         """Initializer for the ParticleContainer class.
@@ -61,17 +92,7 @@ class ParticleContainer(BaseContainer):
             Keyword arguments to be passed to the parent BaseContainer class.
 
         """
-        super().__init__(**kwargs)
-        self.valid_files = self.reader.GetValidFiles(
-            path=self.path,
-            category="particles",
-            num_cpus=self.num_cpus,
-        )
-        self.valid_steps = self.reader.GetValidSteps(
-            path=self.path,
-            category="particles",
-            num_cpus=self.num_cpus,
-        )
+        super().__init__(category="particles", **kwargs)
 
         # @TODO: parallelize
         self.quantity_names_by_step = {
@@ -131,16 +152,6 @@ class ParticleContainer(BaseContainer):
             for step in self.valid_steps
         )
 
-        # save times and steps
-        steps = np.array(self.valid_steps)
-        times = self.reader.ReadPerTimestepVariable(
-            self.path,
-            "particles",
-            "Time",
-            "t",
-            self.valid_files,
-        )["t"]
-
         # determine coordinate system and remap functions
         first_step = self.valid_steps[0]
         attributes = self.reader.ReadAttrsAtTimestep(
@@ -176,8 +187,8 @@ class ParticleContainer(BaseContainer):
             attributes,
             ParticleDataset(
                 species=all_species,
-                steps=steps,
-                times=times,
+                steps=self.steps,
+                times=self.times,
                 colnames=[
                     (
                         self.remap["particles"](q)

@@ -65,18 +65,7 @@ class FieldContainer(BaseContainer):
             Keyword arguments to be passed to the parent BaseContainer class.
 
         """
-        super().__init__(**kwargs)
-        self.valid_files = self.reader.GetValidFiles(
-            path=self.path,
-            category="fields",
-            num_cpus=self.num_cpus,
-        )
-        self.valid_steps = self.reader.GetValidSteps(
-            path=self.path,
-            category="fields",
-            num_cpus=self.num_cpus,
-        )
-
+        super().__init__(category="fields", **kwargs)
         if self.reader.DefinesCategory(self.path, "fields", self.valid_files):
             self.__fields_defined = True
             self.__fields = self._read_fields()
@@ -189,21 +178,6 @@ class FieldContainer(BaseContainer):
                 new_coords[self.remap["coords"](coord)] = coords[coord]
             coords = new_coords
 
-        times = self.reader.ReadPerTimestepVariable(
-            self.path,
-            "fields",
-            "Time",
-            "t",
-            self.valid_files,
-        )
-        steps = self.reader.ReadPerTimestepVariable(
-            self.path,
-            "fields",
-            "Step",
-            "s",
-            self.valid_files,
-        )
-
         edge_coords = self.reader.ReadEdgeCoordsAtTimestep(self.path, first_step)
         new_edge_coords = {}
         for coord in edge_coords.keys():
@@ -216,8 +190,8 @@ class FieldContainer(BaseContainer):
             new_edge_coords[assoc_x + "_max"] = (assoc_x, edge_coords[coord][1:])
         edge_coords = new_edge_coords
 
-        all_dims = {**times, **coords}.keys()
-        all_coords = {**times, **coords, "s": ("t", steps["s"]), **edge_coords}
+        all_dims = {"t": self.times, **coords}.keys()
+        all_coords = {"t": self.times, **coords, "s": ("t", self.steps), **edge_coords}
 
         return xr.Dataset(
             {
@@ -248,7 +222,12 @@ class FieldContainer(BaseContainer):
                     dims=all_dims,
                     coords=all_coords,
                 )
-                for name in tqdm(field_names, desc="fields", position=0, leave=False)
+                for name in tqdm(
+                    field_names,
+                    desc="fields",
+                    position=0,
+                    leave=False,
+                )
             },
             attrs=attributes,
         )

@@ -1,4 +1,4 @@
-from typing import Callable, Any, Union, Optional, List, Dict
+from typing import Callable, Any, Union, Optional, List, Dict, Tuple
 
 import os
 
@@ -53,6 +53,8 @@ class Data:
         spectra: bool = True,
         diagnostics: bool = False,
         verify: bool = False,
+        timerange: Optional[Tuple[Union[float, None], Union[float, None]]] = None,
+        steprange: Optional[Tuple[Union[int, None], Union[int, None]]] = None,
         reader: Optional[BaseReader] = None,
         remap: Optional[Dict[str, Callable[[str], str]]] = None,
         coord_system: Optional[CoordinateSystemType] = None,
@@ -76,6 +78,10 @@ class Data:
             Whether to load the diagnostics component. Default is False.
         verify : bool, optional
             Whether to verify the data. Default is False.
+        timerange : tuple[float | None, float | None], optional
+            Time range to load. If None, all times will be loaded.
+        steprange : tuple[int | None, int | None], optional
+            Step range to load. If None, all steps will be loaded.
         reader : BaseReader, optional
             Reader to use to read the data. If None, it will be determined
             based on the file format.
@@ -117,6 +123,8 @@ class Data:
                 path=path,
                 reader=__reader,
                 verify=verify,
+                timerange=timerange,
+                steprange=steprange,
                 remap=remap,
                 coord_system=CoordinateSystem.from_str(coord_system)
                 if coord_system
@@ -128,6 +136,8 @@ class Data:
                 path=path,
                 reader=__reader,
                 verify=verify,
+                timerange=timerange,
+                steprange=steprange,
                 remap=remap,
                 coord_system=CoordinateSystem.from_str(coord_system)
                 if coord_system
@@ -139,6 +149,8 @@ class Data:
                 path=path,
                 reader=__reader,
                 verify=verify,
+                timerange=timerange,
+                steprange=steprange,
                 remap=remap,
                 coord_system=CoordinateSystem.from_str(coord_system)
                 if coord_system
@@ -255,14 +267,19 @@ class Data:
         if time is None:
             raise ValueError("No time values found.")
         name: str = ""
-        if self.attrs.get("simulation.name", None) is None:
-            name = movie_kwargs.pop("name", "movie")
+        provided_name = movie_kwargs.pop("name", None)
+        if provided_name is not None:
+            name = provided_name
+        elif self.attrs.get("simulation.name", None) is None:
+            name = provided_name
         else:
             name_b = self.attrs.get("simulation.name")
             if isinstance(name_b, bytes):
                 name = name_b.decode("utf-8")
             else:
                 name = str(name_b)
+        if name is None:
+            raise ValueError("No name provided for the movie.")
         return makeFramesAndMovie(
             name=name,
             data=self,
