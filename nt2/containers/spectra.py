@@ -1,29 +1,58 @@
-from typing import Any
+from typing import Any, Union, Dict
 
 import dask
 import dask.array as da
 import xarray as xr
 import numpy as np
+from tqdm import tqdm
 
-from nt2.containers.container import BaseContainer
-from nt2.readers.base import BaseReader
+from .base import BaseContainer
 
 
-class Spectra(BaseContainer):
-    """Parent class to manager the spectra dataframe."""
+class SpectraContainer(BaseContainer):
+    """Parent class to manage the spectra dataframe."""
 
-    @staticmethod
-    def read_spectrum(path: str, reader: BaseReader, spectrum: str, step: int) -> Any:
+    __spectra_defined: bool = False
+    __spectra: Union[xr.Dataset, None] = None
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.valid_files = self.reader.GetValidFiles(
+            path=self.path,
+            category="spectra",
+            num_cpus=self.num_cpus,
+        )
+        self.valid_steps = self.reader.GetValidSteps(
+            path=self.path,
+            category="spectra",
+            num_cpus=self.num_cpus,
+        )
+
+        if self.reader.DefinesCategory(
+            self.path,
+            "spectra",
+            self.valid_files,
+        ):
+            self.__spectra_defined = True
+            self.__spectra = self._read_spectra()
+
+    @property
+    def spectra_defined(self) -> bool:
+        """bool: Whether the spectra category is defined."""
+        return self.__spectra_defined
+
+    @property
+    def spectra(self) -> Union[xr.Dataset, None]:
+        """xr.Dataset: The spectra dataframe."""
+        return self.__spectra
+
+    def _read_spectrum(self, spectrum: str, step: int) -> Any:
         """Reads a spectrum from the data.
 
         This is a dask-delayed function used further to build the dataset.
 
         Parameters
         ----------
-        path : str
-            Main path to the data.
-        reader : BaseReader
-            Reader to use to read the data.
         spectrum : str
             Spectrum array to read.
         step : int
@@ -35,42 +64,40 @@ class Spectra(BaseContainer):
             Spectrum data.
 
         """
-        return reader.ReadArrayAtTimestep(path, "spectra", spectrum, step)
+        return self.reader.ReadArrayAtTimestep(self.path, "spectra", spectrum, step)
 
-    def __init__(self, **kwargs: Any) -> None:
-        super(Spectra, self).__init__(**kwargs)
-        if self.reader.DefinesCategory(self.path, "spectra"):
-            self.__spectra_defined = True
-            self.__spectra = self.__read_spectra()
-        else:
-            self.__spectra_defined = False
-            self.__spectra = xr.Dataset()
-
-    @property
-    def spectra_defined(self) -> bool:
-        """bool: Whether the spectra category is defined."""
-        return self.__spectra_defined
-
-    @property
-    def spectra(self) -> xr.Dataset:
-        """xr.Dataset: The spectra dataframe."""
-        return self.__spectra
-
-    def __read_spectra(self) -> xr.Dataset:
-        self.reader.VerifySameCategoryNames(self.path, "spectra", "s")
-        valid_steps = sorted(self.reader.GetValidSteps(self.path, "spectra"))
+    def _read_spectra(self) -> xr.Dataset:
+        if self.verify:
+            self.reader.VerifySameCategoryNames(
+                self.path,
+                "spectra",
+                "s",
+                self.valid_steps,
+            )
+        first_step = self.valid_steps[0]
         spectra_names = self.reader.ReadCategoryNamesAtTimestep(
-            self.path, "spectra", "s", valid_steps[0]
+            self.path, "spectra", "s", first_step
         )
         spectra_names = set(s for s in sorted(spectra_names) if s.startswith("sN"))
         ebin_name = "sEbn"
-        first_step = valid_steps[0]
         first_spectrum_name = next(iter(spectra_names))
         shape = self.reader.ReadArrayShapeExplicitlyAtTimestep(
             self.path, "spectra", first_spectrum_name, first_step
         )
-        times = self.reader.ReadPerTimestepVariable(self.path, "spectra", "Time", "t")
-        steps = self.reader.ReadPerTimestepVariable(self.path, "spectra", "Step", "s")
+        times = self.reader.ReadPerTimestepVariable(
+            self.path,
+            "spectra",
+            "Time",
+            "t",
+            self.valid_files,
+        )
+        steps = self.reader.ReadPerTimestepVariable(
+            self.path,
+            "spectra",
+            "Step",
+            "s",
+            self.valid_files,
+        )
 
         ebins = self.reader.ReadArrayAtTimestep(
             self.path, "spectra", ebin_name, first_step
@@ -85,6 +112,10 @@ class Spectra(BaseContainer):
         all_dims = {**times, "E": ebins}
         all_coords = {**all_dims, "s": ("t", steps["s"])}
 
+        attributes = self.reader.ReadAttrsAtTimestep(
+            path=self.path, category="spectra", step=first_step
+        )
+
         def remap_name(name: str) -> str:
             return name[1:]
 
@@ -94,28 +125,39 @@ class Spectra(BaseContainer):
                     da.stack(
                         [
                             da.from_delayed(
-                                dask.delayed(self.read_spectrum)(
-                                    path=self.path,
-                                    reader=self.reader,
+                                dask.delayed(self._read_spectrum)(
                                     spectrum=spectrum,
                                     step=step,
                                 ),
                                 shape=shape,
                                 dtype="float",
                             )
-                            for step in valid_steps
+                            for step in tqdm(
+                                self.valid_steps,
+                                desc="steps",
+                                position=1,
+                                leave=False,
+                            )
                         ],
                     ),
                     name=remap_name(spectrum),
                     dims=all_dims,
                     coords=all_coords,
                 )
-                for spectrum in spectra_names
+                for spectrum in tqdm(
+                    spectra_names, desc="spectra", position=0, leave=False
+                )
             },
-            attrs=self.reader.ReadAttrsAtTimestep(
-                path=self.path, category="spectra", step=first_step
-            ),
+            attrs=attributes,
         )
+
+    @property
+    def attrs(self) -> Dict[str, Any]:
+        """dict: The attributes of the spectra dataframe."""
+        if self.spectra_defined:
+            return self.spectra.attrs
+        else:
+            return {}
 
     def help_spectra(self, prepend="") -> str:
         ret = f"{prepend}- use .sel(...) to select specific energy or time intervals\n"

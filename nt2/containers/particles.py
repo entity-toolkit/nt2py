@@ -1,561 +1,59 @@
-from typing import (
-    Any,
-    Callable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Literal,
-    Union,
-    Dict,
-    Type,
-)
+from typing import Any, List, Union, Dict, Set
 import numpy.typing as npt
-from copy import copy
 
-import dask
-import dask.dataframe as dd
-import pandas as pd
 import numpy as np
 
-import matplotlib.pyplot as plt
-import matplotlib.axes as maxes
-
-from nt2.containers.container import BaseContainer
-
-
-IntSelector = Union[int, Sequence[int], slice, Tuple[int, int]]
-FloatSelector = Union[float, slice, Sequence[float], Tuple[float, float]]
+from .base import BaseContainer
+from .particle_dataset import ParticleDataset
+from ..utils import CoordinateSystem
 
 
-class Selection:
-    def __init__(
-        self,
-        type: Literal["value", "range", "list"],
-        value: Optional[Union[int, float, list, tuple]] = None,
-    ):
-        self.type = type
-        self.value = value
-
-    def intersect(self, other: "Selection") -> "Selection":
-        if self.value is None:
-            return copy(other)
-        elif other.value is None:
-            return copy(self)
-        if self.type == "value" and other.type == "value":
-            if self.value == other.value:
-                return Selection("value", self.value)
-            else:
-                return Selection("value")
-        elif self.type == "value" and other.type == "list":
-            assert isinstance(other.value, list), "other.value must be a list"
-            if self.value in other.value:
-                return Selection("value", self.value)
-            else:
-                return Selection("value")
-        elif self.type == "value" and other.type == "range":
-            assert (
-                isinstance(other.value, tuple) and len(other.value) == 2
-            ), "other.value must be a tuple of length 2"
-            lo, hi = other.value
-            if lo <= self.value < hi:
-                return Selection("value", self.value)
-            else:
-                return Selection("value")
-        elif self.type == "list" and other.type == "value":
-            return other.intersect(self)
-        elif self.type == "list" and other.type == "list":
-            assert isinstance(self.value, list), "self.value must be a list"
-            assert isinstance(other.value, list), "other.value must be a list"
-            new_values = [v for v in self.value if v in other.value]
-            return Selection("list", new_values)
-        elif self.type == "list" and other.type == "range":
-            assert (
-                isinstance(other.value, tuple) and len(other.value) == 2
-            ), "other.value must be a tuple of length 2"
-            assert isinstance(self.value, list), "self.value must be a list"
-            lo, hi = other.value
-            new_values = [v for v in self.value if lo <= v <= hi]
-            return Selection("list", new_values)
-        elif self.type == "range" and other.type == "value":
-            return other.intersect(self)
-        elif self.type == "range" and other.type == "list":
-            return other.intersect(self)
-        elif self.type == "range" and other.type == "range":
-            assert (
-                isinstance(self.value, tuple) and len(self.value) == 2
-            ), "self.value must be a tuple of length 2"
-            assert (
-                isinstance(other.value, tuple) and len(other.value) == 2
-            ), "other.value must be a tuple of length 2"
-            lo1, hi1 = self.value
-            lo2, hi2 = other.value
-            new_lo = max(lo1, lo2)
-            new_hi = min(hi1, hi2)
-            if new_lo <= new_hi:
-                return Selection("range", (new_lo, new_hi))
-            else:
-                return Selection("value")
-        else:
-            raise ValueError(f"Unknown selection types: {self.type}, {other.type}")
-
-    def __repr__(self) -> str:
-        if self.type == "value":
-            return "all" if self.value is None else f"{self.value:.3g}"
-        elif self.type == "range":
-            if self.value is None:
-                return "all"
-            else:
-                assert (
-                    isinstance(self.value, tuple) and len(self.value) == 2
-                ), "value must be a tuple of length 2"
-                lo, hi = self.value
-                lo_str = "..." if lo is None or lo == -np.inf else f"{lo:.3g}"
-                hi_str = "..." if hi is None or hi == np.inf else f"{hi:.3g}"
-                return f"[ {lo_str} -> {hi_str} ]"
-        elif self.type == "list":
-            assert isinstance(self.value, list), "value must be a list"
-            return "{ " + ", ".join(f"{v:.3g}" for v in self.value) + " }"
-        else:
-            return "InvalidSelection"
-
-    def __str__(self) -> str:
-        return self.__repr__()
+def remap_prtl_quantities_cart(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+        "U1": "ux",
+        "U2": "uy",
+        "U3": "uz",
+        "W": "w",
+    }.get(shortname, shortname)
 
 
-def _coerce_selector_to_mask(
-    s: Union[IntSelector, FloatSelector],
-    series: Any,
-    inclusive_tuple: bool = True,
-    method="exact",
-):
-    from operator import ior
-    from functools import reduce
-
-    if isinstance(s, slice):
-        lo = s.start if s.start is not None else -np.inf
-        hi = s.stop if s.stop is not None else np.inf
-        step = s.step
-        mask = (series >= lo) & (series <= hi)
-        if step not in (None, 1):
-            mask = mask & (((series - lo) % step) == 0)
-        return mask, ("range", (lo, hi))
-    elif isinstance(s, tuple) and len(s) == 2 and inclusive_tuple:
-        lo, hi = s
-        if lo is None:
-            lo = -np.inf
-        if hi is None:
-            hi = np.inf
-        return (series >= lo) & (series <= hi), ("range", (lo, hi))
-    elif isinstance(s, (list, tuple, np.ndarray, pd.Index, pd.Series)):
-        if method == "exact":
-            return series.isin(list(s)), ("list", list(s))
-        else:
-            return reduce(
-                ior, [np.abs(series - v) == np.abs(series - v).min() for v in s]
-            ), ("list", list(s))
-    else:
-        if method == "exact":
-            return series == s, ("value", s)
-        else:
-            return np.abs(series - s) == np.abs(series - s).min(), ("value", s)
+def remap_prtl_quantities_sph(name: str) -> str:
+    shortname = name[1:]
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+        "U1": "ur",
+        "U2": "uth",
+        "U3": "uph",
+        "W": "w",
+    }.get(shortname, shortname)
 
 
-def _attach_columns(
-    part: pd.DataFrame,
-    cols_tuple,
-    read_column,
-    metadtypes,
-) -> pd.DataFrame:
-    if len(part) == 0:
-        for c in cols_tuple:
-            part[c] = np.array([], dtype=metadtypes[c])
-        return part
-    st_val = int(part["st"].iloc[0])
-
-    arrays = {c: read_column(st_val, c) for c in cols_tuple}
-
-    sel = part["row"].to_numpy()
-    for c in cols_tuple:
-        part[c] = np.asarray(arrays[c])[sel]
-    return part
-
-
-class ParticleDataset:
-    steps: npt.NDArray[np.int64]
-    times: npt.NDArray[np.float64]
-    colnames: List[str]
-
-    def __init__(
-        self,
-        species: List[int],
-        steps: npt.NDArray[np.int64],
-        times: npt.NDArray[np.float64],
-        colnames: List[str],
-        read_column: Callable[
-            [int, str], npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]
-        ],
-        fprec: Optional[Type] = np.float32,
-        selection: Optional[Dict[str, Selection]] = None,
-        ddf_index: Optional[dd.DataFrame] = None,
-    ):
-        self.species = species
-        self.steps = steps
-        self.times = times
-        self.colnames = colnames
-
-        self.read_column = read_column
-        self.fprec = fprec
-        self.index_cols = ("id", "sp")
-        self._all_columns_cache: Optional[List[str]] = None
-
-        if selection is not None:
-            self.selection = selection
-        else:
-            self.selection = {
-                "t": Selection("range"),
-                "st": Selection("range"),
-                "sp": Selection("range"),
-                "id": Selection("range"),
-            }
-
-        self._dtypes = {
-            "id": np.int64,
-            "sp": np.int32,
-            "row": np.int64,
-            "st": np.int64,
-            "t": fprec,
-            "x": fprec,
-            "y": fprec,
-            "z": fprec,
-            "ux": fprec,
-            "uy": fprec,
-            "uz": fprec,
-            "r": fprec,
-            "th": fprec,
-            "ph": fprec,
-            "ur": fprec,
-            "uth": fprec,
-            "uph": fprec,
-        }
-
-        if ddf_index is not None:
-            self._ddf_index = ddf_index
-        else:
-            self._ddf_index = self._build_index_ddf()
-
-    @property
-    def ddf(self) -> dd.DataFrame:
-        return self._ddf_index
-
-    @property
-    def nbytes(self) -> int:
-        return self.ddf.memory_usage(index=True, deep=True).sum().compute()
-
-    @property
-    def columns(self) -> List[str]:
-        if self._all_columns_cache is None:
-            self._all_columns_cache = self.colnames
-        return self._all_columns_cache
-
-    def sel(
-        self,
-        t: Optional[Union[IntSelector, FloatSelector]] = None,
-        st: Optional[IntSelector] = None,
-        sp: Optional[IntSelector] = None,
-        id: Optional[IntSelector] = None,
-        method: str = "exact",
-    ) -> "ParticleDataset":
-        ddf = self._ddf_index
-        new_selection = {k: copy(v) for k, v in self.selection.items()}
-        if st is not None:
-            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                st, ddf["st"], method="exact"
-            )
-            ddf = ddf[ddf_sel]
-            new_selection["st"] = new_selection["st"].intersect(
-                Selection(sel_type, sel_value)
-            )
-        if t is not None:
-            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                t, ddf["t"], method=method
-            )
-            ddf = ddf[ddf_sel]
-            new_selection["t"] = new_selection["t"].intersect(
-                Selection(sel_type, sel_value)
-            )
-        if sp is not None:
-            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                sp, ddf["sp"], method="exact"
-            )
-            ddf = ddf[ddf_sel]
-            new_selection["sp"] = new_selection["sp"].intersect(
-                Selection(sel_type, sel_value)
-            )
-        if id is not None:
-            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                id, ddf["id"], method="exact"
-            )
-            ddf = ddf[ddf_sel]
-            new_selection["id"] = new_selection["id"].intersect(
-                Selection(sel_type, sel_value)
-            )
-
-        return ParticleDataset(
-            species=self.species,
-            steps=self.steps,
-            times=self.times,
-            colnames=self.colnames,
-            read_column=self.read_column,
-            fprec=self.fprec,
-            selection=new_selection,
-            ddf_index=ddf,
-        )
-
-    def isel(
-        self, t: Optional[IntSelector] = None, st: Optional[IntSelector] = None
-    ) -> "ParticleDataset":
-        ddf = self._ddf_index
-        new_selection = {k: v for k, v in self.selection.items()}
-        for t_or_s, t_or_s_str, t_or_s_arr in zip(
-            [t, st], ["t", "st"], [self.times, self.steps]
-        ):
-            if t_or_s is not None:
-                if isinstance(t_or_s, slice):
-                    lo = t_or_s.start if t_or_s.start is not None else 0
-                    hi = t_or_s.stop if t_or_s.stop is not None else -1
-                    ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                        slice(t_or_s_arr[lo], t_or_s_arr[hi]),
-                        ddf[t_or_s_str],
-                        method="exact",
-                    )
-                    ddf = ddf[ddf_sel]
-                    new_selection[t_or_s_str] = new_selection[t_or_s_str].intersect(
-                        Selection(sel_type, sel_value)
-                    )
-                elif isinstance(t_or_s, (list, tuple, np.ndarray, pd.Index, pd.Series)):
-                    ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                        [t_or_s_arr[ti] for ti in t_or_s],
-                        ddf[t_or_s_str],
-                        method="exact",
-                    )
-                    ddf = ddf[ddf_sel]
-                    new_selection[t_or_s_str] = new_selection[t_or_s_str].intersect(
-                        Selection(sel_type, sel_value)
-                    )
-                else:
-                    ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
-                        t_or_s_arr[t_or_s], ddf[t_or_s_str], method="exact"
-                    )
-                    ddf = ddf[ddf_sel]
-                    new_selection[t_or_s_str] = new_selection[t_or_s_str].intersect(
-                        Selection(sel_type, sel_value)
-                    )
-        return ParticleDataset(
-            species=self.species,
-            steps=self.steps,
-            times=self.times,
-            colnames=self.colnames,
-            read_column=self.read_column,
-            fprec=self.fprec,
-            selection=new_selection,
-            ddf_index=ddf,
-        )
-
-    def _load_index_partition(self, st: int, t: float, index_cols: Tuple[str, ...]):
-        cols = {c: self.read_column(st, c) for c in index_cols}
-        n = len(next(iter(cols.values())))
-        df = pd.DataFrame(cols)
-        df["st"] = np.asarray(st, dtype=np.int64)
-        df["t"] = np.asarray(t, dtype=float)
-        df["row"] = np.arange(n, dtype=np.int64)
-        return df
-
-    def _build_index_ddf(self) -> dd.DataFrame:
-        delayed_parts = [
-            dask.delayed(self._load_index_partition)(st, t, self.index_cols)
-            for st, t in zip(self.steps, self.times)
-        ]
-
-        meta = pd.DataFrame(
-            {
-                **{
-                    c: np.array([], dtype=self._dtypes.get(c, "O"))
-                    for c in self.index_cols
-                },
-                "st": np.array([], dtype=self._dtypes.get("st", np.int64)),
-                "t": np.array([], dtype=self._dtypes.get("t", np.int64)),
-                "row": np.array([], dtype=self._dtypes.get("row", np.int64)),
-            }
-        )
-
-        ddf = dd.from_delayed(delayed_parts, meta=meta)
-        return ddf
-
-    def load(self, cols: Optional[Sequence[str]] = None) -> pd.DataFrame:
-        if cols is None:
-            cols = self.columns
-
-        cols = [c for c in cols if c not in ("t", "st", "row")]
-
-        meta_dict = {
-            c: np.array([], dtype=self._dtypes.get(c, np.float64)) for c in cols
-        }
-        meta = self._ddf_index._meta.assign(**meta_dict)
-
-        cols_tuple = tuple(cols)
-
-        return (
-            self._ddf_index.map_partitions(
-                _attach_columns,
-                cols_tuple=cols_tuple,
-                read_column=self.read_column,
-                metadtypes=meta.dtypes,
-                meta=meta,
-            )
-            .compute()
-            .drop(columns=["row"])
-        )
-
-    def help(self, prepend="") -> str:
-        ret = f"{prepend}- use .sel(...) to select particles based on criteria:\n"
-        ret += f"{prepend}  t  : time (float)\n"
-        ret += f"{prepend}  st : step (int)\n"
-        ret += f"{prepend}  sp : species (int)\n"
-        ret += f"{prepend}  id : particle id (int)\n{prepend}\n"
-        ret += f"{prepend}  # example:\n"
-        ret += f"{prepend}  #   .sel(t=slice(10.0, 20.0), sp=[1, 2, 3], id=[42, 22])\n{prepend}\n"
-        ret += f"{prepend}- use .isel(...) to select particles based on output step:\n"
-        ret += f"{prepend}  t  : timestamp index (int)\n"
-        ret += f"{prepend}  st : step index (int)\n{prepend}\n"
-        ret += f"{prepend}  # example:\n"
-        ret += f"{prepend}  #   .isel(t=-1)\n"
-        ret += f"{prepend}\n"
-        ret += f"{prepend}- .sel and .isel can be chained together:\n{prepend}\n"
-        ret += f"{prepend}  # example:\n"
-        ret += f"{prepend}  #   .isel(t=-1).sel(sp=1).sel(id=[55, 66])\n{prepend}\n"
-        ret += f"{prepend}- use .load(cols=[...]) to load data into a pandas DataFrame (`cols` defaults to all columns)\n{prepend}\n"
-        ret += f"{prepend}  # example:\n"
-        ret += f"{prepend}  #  .sel(...).load()\n"
-        return ret
-
-    def __repr__(self) -> str:
-        ret = "ParticleDataset:\n"
-        ret += "================\n"
-        ret += f"Variables:\n  {self.columns}\n\n"
-        ret += "Current selection:\n"
-        for k, v in self.selection.items():
-            ret += f"  {k:<5} : {v}\n"
-        ret += "\nHelp:\n"
-        ret += "-----\n"
-        ret += f"{self.help()}"
-        return ret
-
-    def __str__(self) -> str:
-        return self.__repr__()
-
-    def spectrum_plot(
-        self,
-        ax: Optional[maxes.Axes] = None,
-        bins: Optional[npt.NDArray] = None,
-        quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
-    ):
-        if ax is None:
-            ax = plt.gca()
-
-        if "ux" in self.columns:
-            cols = ["ux", "uy", "uz"]
-            if quantity is None:
-                uSqr = lambda df: np.sum(
-                    [df[c].to_numpy(dtype=np.float64) ** 2 for c in cols], axis=0
-                )
-                quantity = lambda df: uSqr(df) * np.sqrt(1.0 + uSqr(df))
-        else:
-            cols = ["ur", "uth", "uph"]
-            if quantity is None:
-                uSqr = lambda df: np.sum(
-                    [df[c].to_numpy(dtype=np.float64) ** 2 for c in cols], axis=0
-                )
-                quantity = lambda df: uSqr(df) * np.sqrt(1.0 + uSqr(df))
-        df = self.load(cols=["sp", *cols])
-        species = sorted(df["sp"].unique())
-        arrays = df.groupby("sp").apply(quantity, include_groups=False)
-        if bins is None:
-            bins = np.logspace(0, 4, 100)
-        hists = {sp: np.histogram(arrays[sp], bins=bins)[0] for sp in species}
-        bins = 0.5 * (bins[1:] + bins[:-1])
-        for sp in species:
-            ax.loglog(bins, hists[sp], label=f"{sp}")
-        if bins.min() > 0 and bins.max() / bins.min() > 100:
-            ax.set(xscale="log", yscale="log")
-
-    def phase_plot(
-        self,
-        ax: Optional[maxes.Axes] = None,
-        x_quantity: Optional[Callable[[pd.DataFrame], np.ndarray]] = None,
-        y_quantity: Optional[Callable[[pd.DataFrame], np.ndarray]] = None,
-        xy_bins: Optional[Tuple[npt.NDArray, npt.NDArray]] = None,
-        **kwargs: Any,
-    ):
-        if ax is None:
-            ax = plt.gca()
-
-        if "ux" in self.columns:
-            cols = ["ux", "uy", "uz"]
-            for c in "xyz":
-                if c in self.columns:
-                    cols.append(c)
-            if x_quantity is None:
-                x_quantity = lambda df: df["x"].to_numpy(dtype=np.float64)
-            if y_quantity is None:
-                y_quantity = lambda df: df["ux"].to_numpy(dtype=np.float64)
-        else:
-            cols = ["ur", "uth", "uph"]
-            for c in ["r", "th", "ph"]:
-                if c in self.columns:
-                    cols.append(c)
-            if x_quantity is None:
-                x_quantity = lambda df: df["r"].to_numpy(dtype=np.float64)
-            if y_quantity is None:
-                y_quantity = lambda df: df["ur"].to_numpy(dtype=np.float64)
-
-        df = self.load(cols=[*cols])
-        x_array = x_quantity(df)
-        y_array = y_quantity(df)
-
-        if xy_bins is None:
-            x_bins = np.linspace(x_array.min(), x_array.max(), 100)
-            y_bins = np.linspace(y_array.min(), y_array.max(), 100)
-            xy_bins = (x_bins, y_bins)
-        else:
-            x_bins, y_bins = xy_bins
-
-        h2d, xedges, yedges = np.histogram2d(x_array, y_array, bins=[x_bins, y_bins])
-        X, Y = np.meshgrid(
-            0.5 * (xedges[1:] + xedges[:-1]), 0.5 * (yedges[1:] + yedges[:-1])
-        )
-        pcm = ax.pcolormesh(
-            X,
-            Y,
-            h2d.T,
-            shading="auto",
-            rasterized=True,
-            **kwargs,
-        )
-        return pcm
-
-
-class Particles(BaseContainer):
+class ParticleContainer(BaseContainer):
     """Parent class to manage the particles dataframe."""
 
-    __particles_defined: bool
-    __particles: Optional[ParticleDataset]
+    __particles_defined: bool = False
+    __particles: Union[ParticleDataset, None] = None
+
+    nonempty_steps: List[int]
+    attributes: Dict[str, Any]
     quantities: List[str]
     sp_with_idx: List[int]
     sp_without_idx: List[int]
+    quantity_names_by_step: Dict[int, Set[str]]
+
+    def __getstate__(self) -> dict[str, Any]:
+        state = self.__dict__.copy()
+        state.pop("_ParticleContainer__particles", None)
+        return state
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initializer for the Particles class.
+        """Initializer for the ParticleContainer class.
 
         Parameters
         ----------
@@ -563,50 +61,123 @@ class Particles(BaseContainer):
             Keyword arguments to be passed to the parent BaseContainer class.
 
         """
-        super(Particles, self).__init__(**kwargs)
+        super().__init__(**kwargs)
+        self.valid_files = self.reader.GetValidFiles(
+            path=self.path,
+            category="particles",
+            num_cpus=self.num_cpus,
+        )
+        self.valid_steps = self.reader.GetValidSteps(
+            path=self.path,
+            category="particles",
+            num_cpus=self.num_cpus,
+        )
+
+        # @TODO: parallelize
+        self.quantity_names_by_step = {
+            step: self.reader.ReadCategoryNamesAtTimestep(
+                self.path, "particles", "p", step
+            )
+            for step in self.valid_steps
+        }
+        self.nonempty_steps = [
+            step
+            for step, names in self.quantity_names_by_step.items()
+            if any(q.startswith("p") for q in names)
+        ]
+
         if (
-            self.reader.DefinesCategory(self.path, "particles")
-            and self.particles_present
+            self.reader.DefinesCategory(self.path, "particles", self.valid_files)
+            and len(self.nonempty_steps) > 0
         ):
             self.__particles_defined = True
+            (
+                self.quantities,
+                self.sp_with_idx,
+                self.sp_without_idx,
+                self.attributes,
+                self.__particles,
+            ) = self._read_particles()
 
-            valid_steps = self.nonempty_steps
-            quantities_ = [
-                self.reader.ReadCategoryNamesAtTimestep(
-                    self.path, "particles", "p", step
+    def _read_particles(self):
+        # read unique quantities and species
+        quantities_ = [
+            self.quantity_names_by_step[step] for step in self.nonempty_steps
+        ]
+        quantities = sorted(np.unique([q for qtys in quantities_ for q in qtys]))
+
+        unique_quantities = sorted(
+            list(
+                set(
+                    f"{q}".split("_")[0]
+                    for q in quantities
+                    if not q.startswith("pIDX") and not q.startswith("pRNK")
                 )
-                for step in valid_steps
-            ]
-            self.quantities = sorted(
-                np.unique([q for qtys in quantities_ for q in qtys])
             )
+        )
+        all_species = sorted(list(set([int(f"{q}".split("_")[1]) for q in quantities])))
 
-            unique_quantities = sorted(
-                list(
-                    set(
-                        str(q).split("_")[0]
-                        for q in self.quantities
-                        if not q.startswith("pIDX") and not q.startswith("pRNK")
-                    )
+        sp_with_idx = sorted(
+            [int(f"{q}".split("_")[1]) for q in quantities if f"{q}".startswith("pIDX")]
+        )
+        sp_without_idx = sorted([sp for sp in all_species if sp not in sp_with_idx])
+
+        partition_lengths = tuple(
+            sum(
+                self.reader.ReadParticleCountsAtTimestep(
+                    self.path, step, all_species
+                ).values()
+            )
+            for step in self.valid_steps
+        )
+
+        # save times and steps
+        steps = np.array(self.valid_steps)
+        times = self.reader.ReadPerTimestepVariable(
+            self.path,
+            "particles",
+            "Time",
+            "t",
+            self.valid_files,
+        )["t"]
+
+        # determine coordinate system and remap functions
+        first_step = self.valid_steps[0]
+        attributes = self.reader.ReadAttrsAtTimestep(
+            path=self.path, category="particles", step=first_step
+        )
+        if self.coordinate_system is None:
+            if "Coordinates" not in attributes:
+                raise ValueError("Coordinates not found in attributes for particles.")
+            if attributes["Coordinates"] in [b"cart", "cart"]:
+                self.set_coordinate_system(CoordinateSystem.XYZ)
+            elif attributes["Coordinates"] in [b"sph", "sph", b"qsph", "qsph"]:
+                self.set_coordinate_system(CoordinateSystem.SPH)
+            else:
+                raise NotImplementedError(
+                    f"Coordinate system {attributes['Coordinates']} not supported."
                 )
-            )
-            all_species = sorted(
-                list(set([int(str(q).split("_")[1]) for q in self.quantities]))
+
+        if self.remap is None:
+            self.set_remap(
+                {
+                    "particles": (
+                        remap_prtl_quantities_cart
+                        if self.coordinate_system == CoordinateSystem.XYZ
+                        else remap_prtl_quantities_sph
+                    ),
+                }
             )
 
-            self.sp_with_idx = sorted(
-                [int(q.split("_")[1]) for q in self.quantities if q.startswith("pIDX")]
-            )
-            self.sp_without_idx = sorted(
-                [sp for sp in all_species if sp not in self.sp_with_idx]
-            )
-
-            self.__particles = ParticleDataset(
+        return (
+            quantities,
+            sp_with_idx,
+            sp_without_idx,
+            attributes,
+            ParticleDataset(
                 species=all_species,
-                steps=np.array(self.reader.GetValidSteps(self.path, "particles")),
-                times=self.reader.ReadPerTimestepVariable(
-                    self.path, "particles", "Time", "t"
-                )["t"],
+                steps=steps,
+                times=times,
                 colnames=[
                     (
                         self.remap["particles"](q)
@@ -617,34 +188,9 @@ class Particles(BaseContainer):
                 ]
                 + ["id", "sp"],
                 read_column=self._read_column,
-            )
-        else:
-            self.__particles_defined = False
-            self.__particles = None
-
-    @property
-    def particles_present(self) -> bool:
-        """bool: Whether the particles are present in any of the timesteps."""
-        return len(self.nonempty_steps) > 0
-
-    @property
-    def nonempty_steps(self) -> List[int]:
-        """list[int]: List of timesteps that contain particles data."""
-        valid_steps = self.reader.GetValidSteps(self.path, "particles")
-        return [
-            step
-            for step in valid_steps
-            if len(
-                set(
-                    q.split("_")[0]
-                    for q in self.reader.ReadCategoryNamesAtTimestep(
-                        self.path, "particles", "p", step
-                    )
-                    if q.startswith("p")
-                )
-            )
-            > 0
-        ]
+                partition_lengths=partition_lengths,
+            ),
+        )
 
     @property
     def particles_defined(self) -> bool:
@@ -652,16 +198,24 @@ class Particles(BaseContainer):
         return self.__particles_defined
 
     @property
-    def particles(self) -> Optional[ParticleDataset]:
+    def particles(self) -> Union[ParticleDataset, None]:
         """Returns the particles data.
 
         Returns
         -------
-        ParticleDataset
-            Dictionary of datasets for each step.
+        ParticleDataset | None
+            The particles data if defined, otherwise None.
 
         """
         return self.__particles
+
+    @property
+    def attrs(self) -> Dict[str, Any]:
+        """dict: The attributes of the particles dataframe."""
+        if self.particles_defined:
+            return self.attributes
+        else:
+            return {}
 
     def help_particles(self, prepend: str = "") -> str:
         return self.particles.help(prepend) if self.particles is not None else ""
@@ -673,7 +227,7 @@ class Particles(BaseContainer):
                     self.path, "particles", f"pX1_{sp}", step
                 )[0]
             )
-        except:
+        except Exception:
             return np.int64(0)
 
     def _species_has_quantity(self, read_colname: str, step: int, sp: int) -> bool:

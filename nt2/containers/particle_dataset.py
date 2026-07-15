@@ -1,0 +1,667 @@
+from typing import (
+    Any,
+    Callable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Literal,
+    Union,
+    Dict,
+    Type,
+    cast,
+)
+import numpy.typing as npt
+from copy import copy
+
+import dask
+import dask.dataframe as dd
+from dask.delayed import Delayed
+from dask.optimization import cull
+import pandas as pd
+import numpy as np
+
+import matplotlib.pyplot as plt
+import matplotlib.axes as maxes
+
+
+IntSelector = Union[int, Sequence[int], slice, Tuple[int, int]]
+FloatSelector = Union[float, slice, Sequence[float], Tuple[float, float]]
+
+
+def _cull_dataframe_graph(ddf: dd.DataFrame) -> dd.DataFrame:
+    keys = ddf.__dask_keys__()
+    graph, _ = cull(ddf.__dask_graph__(), keys)
+    partitions = [Delayed(key, graph) for key in keys]
+    return cast(
+        dd.DataFrame,
+        dd.from_delayed(
+            partitions,
+            meta=ddf._meta,
+            divisions=ddf.divisions,
+        ),
+    )
+
+
+class Selection:
+    def __init__(
+        self,
+        type: Literal["value", "range", "list"],
+        value: Optional[Union[int, float, list, tuple]] = None,
+    ):
+        self.type = type
+        self.value = value
+
+    def intersect(self, other: "Selection") -> "Selection":
+        if self.value is None:
+            return copy(other)
+        elif other.value is None:
+            return copy(self)
+        if self.type == "value" and other.type == "value":
+            if self.value == other.value:
+                return Selection("value", self.value)
+            else:
+                return Selection("value")
+        elif self.type == "value" and other.type == "list":
+            assert isinstance(other.value, list), "other.value must be a list"
+            if self.value in other.value:
+                return Selection("value", self.value)
+            else:
+                return Selection("value")
+        elif self.type == "value" and other.type == "range":
+            assert isinstance(other.value, tuple) and len(other.value) == 2, (
+                "other.value must be a tuple of length 2"
+            )
+            lo, hi = other.value
+            if lo <= self.value < hi:
+                return Selection("value", self.value)
+            else:
+                return Selection("value")
+        elif self.type == "list" and other.type == "value":
+            return other.intersect(self)
+        elif self.type == "list" and other.type == "list":
+            assert isinstance(self.value, list), "self.value must be a list"
+            assert isinstance(other.value, list), "other.value must be a list"
+            new_values = [v for v in self.value if v in other.value]
+            return Selection("list", new_values)
+        elif self.type == "list" and other.type == "range":
+            assert isinstance(other.value, tuple) and len(other.value) == 2, (
+                "other.value must be a tuple of length 2"
+            )
+            assert isinstance(self.value, list), "self.value must be a list"
+            lo, hi = other.value
+            new_values = [v for v in self.value if lo <= v <= hi]
+            return Selection("list", new_values)
+        elif self.type == "range" and other.type == "value":
+            return other.intersect(self)
+        elif self.type == "range" and other.type == "list":
+            return other.intersect(self)
+        elif self.type == "range" and other.type == "range":
+            assert isinstance(self.value, tuple) and len(self.value) == 2, (
+                "self.value must be a tuple of length 2"
+            )
+            assert isinstance(other.value, tuple) and len(other.value) == 2, (
+                "other.value must be a tuple of length 2"
+            )
+            lo1, hi1 = self.value
+            lo2, hi2 = other.value
+            new_lo = max(lo1, lo2)
+            new_hi = min(hi1, hi2)
+            if new_lo <= new_hi:
+                return Selection("range", (new_lo, new_hi))
+            else:
+                return Selection("value")
+        else:
+            raise ValueError(f"Unknown selection types: {self.type}, {other.type}")
+
+    def __repr__(self) -> str:
+        if self.type == "value":
+            return "all" if self.value is None else f"{self.value:.3g}"
+        elif self.type == "range":
+            if self.value is None:
+                return "all"
+            else:
+                assert isinstance(self.value, tuple) and len(self.value) == 2, (
+                    "value must be a tuple of length 2"
+                )
+                lo, hi = self.value
+                lo_str = "..." if lo is None or lo == -np.inf else f"{lo:.3g}"
+                hi_str = "..." if hi is None or hi == np.inf else f"{hi:.3g}"
+                return f"[ {lo_str} -> {hi_str} ]"
+        elif self.type == "list":
+            assert isinstance(self.value, list), "value must be a list"
+            return "{ " + ", ".join(f"{v:.3g}" for v in self.value) + " }"
+        else:
+            return "InvalidSelection"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+
+def _coerce_selector_to_mask(
+    s: Union[IntSelector, FloatSelector],
+    series: Any,
+    inclusive_tuple: bool = True,
+    method="exact",
+):
+    from operator import ior
+    from functools import reduce
+
+    if isinstance(s, slice):
+        lo = s.start if s.start is not None else -np.inf
+        hi = s.stop if s.stop is not None else np.inf
+        step = s.step
+        mask = (series >= lo) & (series <= hi)
+        if step not in (None, 1):
+            mask = mask & (((series - lo) % step) == 0)
+        return mask, ("range", (lo, hi))
+    elif isinstance(s, tuple) and len(s) == 2 and inclusive_tuple:
+        lo, hi = s
+        if lo is None:
+            lo = -np.inf
+        if hi is None:
+            hi = np.inf
+        return (series >= lo) & (series <= hi), ("range", (lo, hi))
+    elif isinstance(s, (list, tuple, np.ndarray, pd.Index, pd.Series)):
+        if method == "exact":
+            return series.isin(list(s)), ("list", list(s))
+        else:
+            return reduce(
+                ior, [np.abs(series - v) == np.abs(series - v).min() for v in s]
+            ), ("list", list(s))
+    else:
+        if method == "exact":
+            return series == s, ("value", s)
+        else:
+            return np.abs(series - s) == np.abs(series - s).min(), ("value", s)
+
+
+def _attach_columns(
+    part: pd.DataFrame,
+    cols_tuple: Tuple[str, ...],
+    read_column: Callable[[int, str], npt.NDArray[Any]],
+    metadtypes: Any,
+) -> pd.DataFrame:
+    if len(part) == 0:
+        return part.assign(**{c: pd.Series(dtype=metadtypes[c]) for c in cols_tuple})
+    st_val = int(part["st"].iloc[0])
+
+    columns_to_read = tuple(c for c in cols_tuple if c not in part.columns)
+    arrays = {c: read_column(st_val, c) for c in columns_to_read}
+
+    sel = part["row"].to_numpy()
+    for c in columns_to_read:
+        part[c] = np.asarray(arrays[c])[sel]
+    return part
+
+
+def _load_index_partition(
+    st: int,
+    t: float,
+    index_cols: Tuple[str, ...],
+    read_column: Callable[[int, str], npt.NDArray[Any]],
+) -> pd.DataFrame:
+    cols = {c: read_column(st, c) for c in index_cols}
+    n = len(next(iter(cols.values())))
+    return pd.DataFrame(
+        {
+            **cols,
+            "st": np.full(n, st, dtype=np.int64),
+            "t": np.full(n, t, dtype=float),
+            "row": np.arange(n, dtype=np.int64),
+        }
+    )
+
+
+class ParticleDataset:
+    steps: npt.NDArray[np.int64]
+    times: npt.NDArray[np.float64]
+    colnames: List[str]
+    _ddf_index: dd.DataFrame
+
+    def __init__(
+        self,
+        species: List[int],
+        steps: npt.NDArray[np.int64],
+        times: npt.NDArray[np.float64],
+        colnames: List[str],
+        read_column: Callable[
+            [int, str], npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]
+        ],
+        fprec: Optional[Type] = np.float32,
+        selection: Optional[Dict[str, Selection]] = None,
+        ddf_index: Optional[dd.DataFrame] = None,
+        partition_lengths: Optional[Sequence[int]] = None,
+    ):
+        self.species = species
+        self.steps = steps
+        self.times = times
+        self.colnames = colnames
+
+        self.read_column = read_column
+        self.fprec = fprec
+        self.index_cols = ("id", "sp")
+        self._all_columns_cache: Optional[List[str]] = None
+        self._partition_lengths = (
+            tuple(int(length) for length in partition_lengths)
+            if partition_lengths is not None
+            else None
+        )
+
+        if selection is not None:
+            self.selection = selection
+        else:
+            self.selection = {
+                "t": Selection("range"),
+                "st": Selection("range"),
+                "sp": Selection("range"),
+                "id": Selection("range"),
+            }
+
+        self._dtypes = {
+            "id": np.int64,
+            "sp": np.int32,
+            "row": np.int64,
+            "st": np.int64,
+            "t": np.float64,
+            "x": fprec,
+            "y": fprec,
+            "z": fprec,
+            "ux": fprec,
+            "uy": fprec,
+            "uz": fprec,
+            "r": fprec,
+            "th": fprec,
+            "ph": fprec,
+            "ur": fprec,
+            "uth": fprec,
+            "uph": fprec,
+        }
+
+        if ddf_index is not None:
+            self._ddf_index = ddf_index
+            self._partition_indices: Optional[Tuple[int, ...]] = None
+        else:
+            self._ddf_index = self._build_index_ddf()
+            self._partition_indices = tuple(range(self._ddf_index.npartitions))
+
+        if (
+            self._partition_lengths is not None
+            and len(self._partition_lengths) != self._ddf_index.npartitions
+        ):
+            raise ValueError(
+                "partition_lengths must contain one value per Dask partition"
+            )
+
+    @property
+    def ddf(self) -> dd.DataFrame:
+        return self._ddf_index
+
+    @property
+    def nbytes(self) -> int:
+        """Estimated bytes occupied by the particle index's NumPy buffers.
+
+        The estimate excludes small pandas/Dask object overhead.  For datasets
+        filtered by particle values (for example ``sel(sp=1)``), it is an upper
+        bound because finding the exact surviving row count would require
+        computing the lazy index.
+        """
+        if self._partition_lengths is None:
+            # Compatibility fallback for ParticleDataset instances constructed
+            # directly by downstream code without reader-provided metadata.
+            return int(self.ddf.memory_usage(index=True, deep=True).sum().compute())
+
+        bytes_per_row = sum(
+            np.dtype(self._dtypes[column]).itemsize
+            for column in (*self.index_cols, "st", "t", "row")
+        )
+        return int(sum(self._partition_lengths) * bytes_per_row)
+
+    @property
+    def columns(self) -> List[str]:
+        if self._all_columns_cache is None:
+            self._all_columns_cache = self.colnames
+        return self._all_columns_cache
+
+    def sel(
+        self,
+        t: Optional[Union[IntSelector, FloatSelector]] = None,
+        st: Optional[IntSelector] = None,
+        sp: Optional[IntSelector] = None,
+        id: Optional[IntSelector] = None,
+        method: str = "exact",
+    ) -> "ParticleDataset":
+        ddf: dd.DataFrame = self._ddf_index
+        new_selection = {k: copy(v) for k, v in self.selection.items()}
+        if st is not None:
+            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
+                st, ddf["st"], method="exact"
+            )
+            ddf = cast(dd.DataFrame, ddf[ddf_sel])
+            new_selection["st"] = new_selection["st"].intersect(
+                Selection(sel_type, sel_value)
+            )
+        if t is not None:
+            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
+                t, ddf["t"], method=method
+            )
+            ddf = cast(dd.DataFrame, ddf[ddf_sel])
+            new_selection["t"] = new_selection["t"].intersect(
+                Selection(sel_type, sel_value)
+            )
+        if sp is not None:
+            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
+                sp, ddf["sp"], method="exact"
+            )
+            ddf = cast(dd.DataFrame, ddf[ddf_sel])
+            new_selection["sp"] = new_selection["sp"].intersect(
+                Selection(sel_type, sel_value)
+            )
+        if id is not None:
+            ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
+                id, ddf["id"], method="exact"
+            )
+            ddf = cast(dd.DataFrame, ddf[ddf_sel])
+            new_selection["id"] = new_selection["id"].intersect(
+                Selection(sel_type, sel_value)
+            )
+
+        result = ParticleDataset(
+            species=self.species,
+            steps=self.steps,
+            times=self.times,
+            colnames=self.colnames,
+            read_column=self.read_column,
+            fprec=self.fprec,
+            selection=new_selection,
+            ddf_index=ddf,
+            partition_lengths=self._partition_lengths,
+        )
+        result._partition_indices = self._partition_indices
+        return result
+
+    def isel(
+        self, t: Optional[IntSelector] = None, st: Optional[IntSelector] = None
+    ) -> "ParticleDataset":
+        ddf: dd.DataFrame = self._ddf_index
+        partition_indices = self._partition_indices
+        partition_lengths = self._partition_lengths
+        new_selection = {k: v for k, v in self.selection.items()}
+        for t_or_s, t_or_s_str, t_or_s_arr in zip(
+            [t, st], ["t", "st"], [self.times, self.steps]
+        ):
+            if t_or_s is not None:
+                selector: Any
+                if isinstance(t_or_s, slice):
+                    lo = t_or_s.start if t_or_s.start is not None else 0
+                    hi = t_or_s.stop if t_or_s.stop is not None else -1
+                    selector = slice(t_or_s_arr[lo], t_or_s_arr[hi])
+                elif isinstance(t_or_s, (list, tuple, np.ndarray, pd.Index, pd.Series)):
+                    selector = [t_or_s_arr[ti] for ti in t_or_s]
+                else:
+                    selector = t_or_s_arr[t_or_s]
+
+                selector_for_mask = cast(Any, selector)
+                if partition_indices is not None:
+                    partition_mask, _ = _coerce_selector_to_mask(
+                        selector_for_mask,
+                        pd.Series(t_or_s_arr.tolist()),
+                        method="exact",
+                    )
+                    matching_indices = set(np.flatnonzero(np.asarray(partition_mask)))
+                    selected_partitions = [
+                        i
+                        for i, original_index in enumerate(partition_indices)
+                        if original_index in matching_indices
+                    ]
+                    if not selected_partitions:
+                        # Keep one partition for the filter to turn into an empty frame.
+                        selected_partitions = [0]
+                    ddf = cast(dd.DataFrame, ddf.partitions[selected_partitions])
+                    partition_indices = tuple(
+                        partition_indices[i] for i in selected_partitions
+                    )
+                    if partition_lengths is not None:
+                        partition_lengths = tuple(
+                            partition_lengths[i] for i in selected_partitions
+                        )
+
+                ddf_sel, (sel_type, sel_value) = _coerce_selector_to_mask(
+                    selector_for_mask,
+                    ddf[t_or_s_str],
+                    method="exact",
+                )
+                ddf = cast(dd.DataFrame, ddf[ddf_sel])
+                new_selection[t_or_s_str] = new_selection[t_or_s_str].intersect(
+                    Selection(sel_type, sel_value)
+                )
+
+        if partition_indices is not None:
+            ddf = _cull_dataframe_graph(ddf)
+
+        result = ParticleDataset(
+            species=self.species,
+            steps=self.steps,
+            times=self.times,
+            colnames=self.colnames,
+            read_column=self.read_column,
+            fprec=self.fprec,
+            selection=new_selection,
+            ddf_index=ddf,
+            partition_lengths=partition_lengths,
+        )
+        result._partition_indices = partition_indices
+        return result
+
+    def _build_index_ddf(self) -> dd.DataFrame:
+        delayed_parts = [
+            dask.delayed(_load_index_partition)(
+                st,
+                t,
+                self.index_cols,
+                self.read_column,
+            )
+            for st, t in zip(self.steps, self.times)
+        ]
+
+        meta = pd.DataFrame(
+            {
+                **{
+                    c: np.array([], dtype=self._dtypes.get(c, "O"))
+                    for c in self.index_cols
+                },
+                "st": np.array([], dtype=self._dtypes.get("st", np.int64)),
+                "t": np.array([], dtype=self._dtypes.get("t", np.int64)),
+                "row": np.array([], dtype=self._dtypes.get("row", np.int64)),
+            }
+        )
+
+        ddf = cast(dd.DataFrame, dd.from_delayed(delayed_parts, meta=meta))
+        return ddf
+
+    def load(self, cols: Optional[Sequence[str]] = None) -> pd.DataFrame:
+        if cols is None:
+            cols = self.columns
+
+        cols = [c for c in cols if c not in ("t", "st", "row")]
+
+        meta_dict = {
+            c: np.array([], dtype=self._dtypes.get(c, np.float64)) for c in cols
+        }
+        meta = self._ddf_index._meta.assign(**meta_dict)
+
+        cols_tuple = tuple(cols)
+
+        return (
+            self._ddf_index.map_partitions(
+                _attach_columns,
+                cols_tuple=cols_tuple,
+                read_column=self.read_column,
+                metadtypes=meta.dtypes,
+                meta=meta,
+            )
+            .compute()
+            .drop(columns=["row"])
+        )
+
+    def help(self, prepend="") -> str:
+        ret = f"{prepend}- use .sel(...) to select particles based on criteria:\n"
+        ret += f"{prepend}  t  : time (float)\n"
+        ret += f"{prepend}  st : step (int)\n"
+        ret += f"{prepend}  sp : species (int)\n"
+        ret += f"{prepend}  id : particle id (int)\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #   .sel(t=slice(10.0, 20.0), sp=[1, 2, 3], id=[42, 22])\n{prepend}\n"
+        ret += f"{prepend}- use .isel(...) to select particles based on output step:\n"
+        ret += f"{prepend}  t  : timestamp index (int)\n"
+        ret += f"{prepend}  st : step index (int)\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #   .isel(t=-1)\n"
+        ret += f"{prepend}\n"
+        ret += f"{prepend}- .sel and .isel can be chained together:\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #   .isel(t=-1).sel(sp=1).sel(id=[55, 66])\n{prepend}\n"
+        ret += f"{prepend}- use .load(cols=[...]) to load data into a pandas DataFrame (`cols` defaults to all columns)\n{prepend}\n"
+        ret += f"{prepend}  # example:\n"
+        ret += f"{prepend}  #  .sel(...).load()\n"
+        return ret
+
+    def __repr__(self) -> str:
+        ret = "ParticleDataset:\n"
+        ret += "================\n"
+        ret += f"Variables:\n  {self.columns}\n\n"
+        ret += "Current selection:\n"
+        for k, v in self.selection.items():
+            ret += f"  {k:<5} : {v}\n"
+        ret += "\nHelp:\n"
+        ret += "-----\n"
+        ret += f"{self.help()}"
+        return ret
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def spectrum_plot(
+        self,
+        ax: Optional[maxes.Axes] = None,
+        bins: Optional[npt.NDArray] = None,
+        quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
+    ):
+        if ax is None:
+            ax = plt.gca()
+
+        def _uSqr_cart(df: pd.DataFrame):
+            return np.sum(
+                [
+                    np.asarray(df[c].to_numpy(), dtype=np.float64) ** 2
+                    for c in ["ux", "uy", "uz"]
+                ],
+                axis=0,
+            )
+
+        def _quantity_cart(df: pd.DataFrame):
+            uSqr = _uSqr_cart(df)
+            return uSqr * np.sqrt(1.0 + uSqr)
+
+        def _uSqr_sph(df: pd.DataFrame):
+            return np.sum(
+                [
+                    np.asarray(df[c].to_numpy(), dtype=np.float64) ** 2
+                    for c in ["ur", "uth", "uph"]
+                ],
+                axis=0,
+            )
+
+        def _quantity_sph(df: pd.DataFrame):
+            uSqr = _uSqr_sph(df)
+            return uSqr * np.sqrt(1.0 + uSqr)
+
+        if "ux" in self.columns:
+            cols = ["ux", "uy", "uz"]
+            if quantity is None:
+                quantity = _quantity_cart
+        else:
+            cols = ["ur", "uth", "uph"]
+            if quantity is None:
+                quantity = _quantity_sph
+        assert quantity is not None
+        df = self.load(cols=["sp", *cols])
+        species = sorted(df["sp"].unique())
+        arrays = {
+            sp: quantity(group.drop(columns=["sp"])) for sp, group in df.groupby("sp")
+        }
+        if bins is None:
+            bins = np.logspace(0, 4, 100)
+        hists = {sp: np.histogram(arrays[sp], bins=bins)[0] for sp in species}
+        bins = 0.5 * (bins[1:] + bins[:-1])
+        for sp in species:
+            ax.loglog(bins, hists[sp], label=f"{sp}")
+        if bins.min() > 0 and bins.max() / bins.min() > 100:
+            ax.set(xscale="log", yscale="log")
+
+    def phase_plot(
+        self,
+        ax: Optional[maxes.Axes] = None,
+        x_quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
+        y_quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
+        xy_bins: Optional[Tuple[npt.NDArray, npt.NDArray]] = None,
+        **kwargs: Any,
+    ):
+        if ax is None:
+            ax = plt.gca()
+
+        def _xquantity_cart(df: pd.DataFrame):
+            return np.asarray(df["x"].to_numpy(), dtype=np.float64)
+
+        def _yquantity_cart(df: pd.DataFrame):
+            return np.asarray(df["ux"].to_numpy(), dtype=np.float64)
+
+        def _xquantity_sph(df: pd.DataFrame):
+            return np.asarray(df["r"].to_numpy(), dtype=np.float64)
+
+        def _yquantity_sph(df: pd.DataFrame):
+            return np.asarray(df["ur"].to_numpy(), dtype=np.float64)
+
+        if "ux" in self.columns:
+            cols = ["ux", "uy", "uz"]
+            for c in "xyz":
+                if c in self.columns:
+                    cols.append(c)
+            if x_quantity is None:
+                x_quantity = _xquantity_cart
+            if y_quantity is None:
+                y_quantity = _yquantity_cart
+        else:
+            cols = ["ur", "uth", "uph"]
+            for c in ["r", "th", "ph"]:
+                if c in self.columns:
+                    cols.append(c)
+            if x_quantity is None:
+                x_quantity = _xquantity_sph
+            if y_quantity is None:
+                y_quantity = _yquantity_sph
+
+        df = self.load(cols=[*cols])
+        x_array = x_quantity(df)
+        y_array = y_quantity(df)
+
+        if xy_bins is None:
+            x_bins = np.linspace(x_array.min(), x_array.max(), 100)
+            y_bins = np.linspace(y_array.min(), y_array.max(), 100)
+            xy_bins = (x_bins, y_bins)
+        else:
+            x_bins, y_bins = xy_bins
+
+        h2d, xedges, yedges = np.histogram2d(x_array, y_array, bins=[x_bins, y_bins])
+        X, Y = np.meshgrid(
+            0.5 * (xedges[1:] + xedges[:-1]), 0.5 * (yedges[1:] + yedges[:-1])
+        )
+        pcm = ax.pcolormesh(
+            X,
+            Y,
+            h2d.T,
+            shading="auto",
+            rasterized=True,
+            **kwargs,
+        )
+        return pcm
