@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Literal
 from enum import Enum
 import os
 import re
@@ -25,6 +25,19 @@ class Layout(Enum):
 class CoordinateSystem(Enum):
     XYZ = "Cartesian"
     SPH = "Spherical"
+
+    @staticmethod
+    def from_str(s):
+        s = s.lower()
+        if s in ("cartesian", "xyz"):
+            return CoordinateSystem.XYZ
+        elif s in ("spherical", "sph"):
+            return CoordinateSystem.SPH
+        else:
+            raise ValueError(f"Unknown coordinate system: {s}")
+
+
+CoordinateSystemType = Literal["XYZ", "SPH"]
 
 
 def DetermineDataFormat(path: str) -> Format:

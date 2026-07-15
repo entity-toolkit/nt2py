@@ -47,7 +47,7 @@ coverage.xml
 *.cover
 *.py,cover
 .hypothesis/
-.pytest_cache/
+.*cache/
 cover/
 
 # Translations
@@ -155,3 +155,9 @@ nt2/tests/testdata
 test/
 temp/
 *.bak
+.*venv
+
+# LLM
+.codex
+.agents
+.claude
