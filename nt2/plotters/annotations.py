@@ -2,11 +2,24 @@ import logging
 
 
 def annotatePulsar(
-    ax, data, rmax, rstar=1.1, ti=None, time=None, attrs={}, ax_props={}, star_props={}
+    ax,
+    data,
+    rmax,
+    rstar=1.1,
+    ti=None,
+    time=None,
+    attrs=None,
+    ax_props=None,
+    star_props=None,
 ):
     import numpy as np
-    from matplotlib import lines
-    from matplotlib import patches
+    from matplotlib import lines, patches
+
+    logger = logging.getLogger(__name__)
+
+    attrs = attrs or {}
+    ax_props = ax_props or {}
+    star_props = star_props or {}
 
     if ti is None and time is None:
         raise ValueError("Must provide either ti or time")
@@ -21,7 +34,7 @@ def annotatePulsar(
             )
         )
     ) is None:
-        logging.warning(
+        logger.warning(
             "No spinup time or spin period found, please specify explicitly as `attrs = {'psr_omega': ..., 'psr_spinup_time': ...}`"
         )
         demo_rotation = False
@@ -45,7 +58,7 @@ def annotatePulsar(
         xy=(0.0, rmax * 0.95),
         xytext=(0.0, -rmax * 0.95),
         zorder=4,
-        arrowprops=dict(arrowstyle="->", color=ax_props.get("color", "k"), lw=0.5),
+        arrowprops={"arrowstyle": "->", "color": ax_props.get("color", "k"), "lw": 0.5},
     )
     for i in range(-int(rmax * 0.8) // 2 - 1, int(rmax * 0.8) // 2):
         if i != -1:

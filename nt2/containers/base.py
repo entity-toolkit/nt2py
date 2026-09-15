@@ -1,7 +1,9 @@
-from typing import Callable, Optional, Dict, Tuple, List, Union
+from __future__ import annotations
 
-import numpy.typing as npt
+from typing import Callable
+
 import numpy as np
+import numpy.typing as npt
 
 from ..readers.base import BaseReader
 from ..utils import CoordinateSystem
@@ -14,17 +16,17 @@ class BaseContainer:
     __category: str
     __reader: BaseReader
     __verify: bool
-    __timerange: Optional[Tuple[Union[float, None], Union[float, None]]]
-    __steprange: Optional[Tuple[Union[int, None], Union[int, None]]]
-    __remap: Optional[Dict[str, Callable[[str], str]]]
-    __coordinate_system: Optional[CoordinateSystem]
-    __num_cpus: Optional[int]
+    __timerange: tuple[float | None, float | None] | None
+    __steprange: tuple[int | None, int | None] | None
+    __remap: dict[str, Callable[[str], str]] | None
+    __coordinate_system: CoordinateSystem | None
+    __num_cpus: int | None
 
-    __valid_steps: List[int] = []
-    __valid_files: List[str] = []
+    __valid_steps: list[int]
+    __valid_files: list[str]
 
-    __times: npt.NDArray = np.array([])
-    __steps: npt.NDArray = np.array([])
+    __times: npt.NDArray
+    __steps: npt.NDArray
 
     def __init__(
         self,
@@ -32,11 +34,11 @@ class BaseContainer:
         category: str,
         reader: BaseReader,
         verify: bool = False,
-        timerange: Union[Tuple[Union[float, None], Union[float, None]], None] = None,
-        steprange: Union[Tuple[Union[int, None], Union[int, None]], None] = None,
-        remap: Union[Dict[str, Callable[[str], str]], None] = None,
-        coord_system: Union[CoordinateSystem, None] = None,
-        num_cpus: Union[int, None] = None,
+        timerange: tuple[float | None, float | None] | None = None,
+        steprange: tuple[int | None, int | None] | None = None,
+        remap: dict[str, Callable[[str], str]] | None = None,
+        coord_system: CoordinateSystem | None = None,
+        num_cpus: int | None = None,
     ):
         """Initializer for the BaseContainer class.
 
@@ -50,9 +52,9 @@ class BaseContainer:
             The reader to be used for reading the data.
         verify : Optional[bool]
             Whether to verify the data. If None, it will use the reader's default.
-        timerange : Optional[Tuple[Union[float, None], Union[float, None]]]
+        timerange : Optional[tuple[Union[float, None], Union[float, None]]]
             Time range to load. If None, all times will be loaded.
-        steprange : Optional[Tuple[Union[int, None], Union[int, None]]]
+        steprange : Optional[tuple[Union[int, None], Union[int, None]]]
             Step range to load. If None, all steps will be loaded.
         remap : Optional[dict[str, Callable[[str], str]]]
             Remap dictionary to use to remap the data names (coords, fields, etc.).
@@ -103,37 +105,37 @@ class BaseContainer:
         return self.__verify
 
     @property
-    def remap(self) -> Optional[Dict[str, Callable[[str], str]]]:
+    def remap(self) -> dict[str, Callable[[str], str]] | None:
         """{ str: (str) -> str } : The coordinate/field remap dictionary."""
         return self.__remap
 
     @property
-    def coordinate_system(self) -> Optional[CoordinateSystem]:
+    def coordinate_system(self) -> CoordinateSystem | None:
         """CoordinateSystem: The coordinate system of the data."""
         return self.__coordinate_system
 
     @property
-    def num_cpus(self) -> Optional[int]:
+    def num_cpus(self) -> int | None:
         """int: The number of CPUs to use for parallel processing."""
         return self.__num_cpus
 
     @property
-    def timerange(self) -> Optional[Tuple[Union[float, None], Union[float, None]]]:
+    def timerange(self) -> tuple[float | None, float | None] | None:
         """tuple[float | None, float | None]: The time range of the data."""
         return self.__timerange
 
     @property
-    def steprange(self) -> Optional[Tuple[Union[int, None], Union[int, None]]]:
+    def steprange(self) -> tuple[int | None, int | None] | None:
         """tuple[int | None, int | None]: The step range of the data."""
         return self.__steprange
 
     @property
-    def valid_files(self) -> List[str]:
+    def valid_files(self) -> list[str]:
         """list[str]: The valid files of the data."""
         return self.__valid_files
 
     @property
-    def valid_steps(self) -> List[int]:
+    def valid_steps(self) -> list[int]:
         """list[int]: The valid steps of the data."""
         return self.__valid_steps
 
@@ -147,7 +149,7 @@ class BaseContainer:
         """npt.NDArray: The steps of the data."""
         return self.__steps
 
-    def read_times_and_steps(self) -> Tuple[npt.NDArray, npt.NDArray]:
+    def read_times_and_steps(self) -> tuple[npt.NDArray, npt.NDArray]:
         """Reads the times and steps for the given category.
 
         Parameters
@@ -187,7 +189,7 @@ class BaseContainer:
             self.__valid_files = self.__valid_files[start_idx : end_idx + 1]
             self.__valid_steps = self.__valid_steps[start_idx : end_idx + 1]
 
-    def set_remap(self, remap: Dict[str, Callable[[str], str]]) -> None:
+    def set_remap(self, remap: dict[str, Callable[[str], str]]) -> None:
         """Set the remap dictionary for the container.
 
         Parameters
@@ -209,7 +211,7 @@ class BaseContainer:
         """
         self.__coordinate_system = coord_system
 
-    def __dask_tokenize__(self) -> Tuple[str, str, str]:
+    def __dask_tokenize__(self) -> tuple[str, str, str]:
         """Provide a deterministic Dask token for container instances."""
         return (
             self.__class__.__name__,

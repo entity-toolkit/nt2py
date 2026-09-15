@@ -1,12 +1,12 @@
 __version__ = "1.6.0"
 
 import xarray as xr
-from .containers.data import Data as nt2Data
 
-from .plotters import polar as acc_polar
-from .plotters import particles as acc_particles
+from .containers.data import Data as nt2Data
 from .plotters import inspect as acc_inspect
 from .plotters import movie as acc_movie
+from .plotters import particles as acc_particles
+from .plotters import polar as acc_polar
 from .utils import InheritClassDocstring
 
 

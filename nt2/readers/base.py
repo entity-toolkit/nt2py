@@ -1,8 +1,10 @@
-from concurrent.futures import as_completed
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
+from __future__ import annotations
+
+import logging
 import os
 import re
-import logging
+from concurrent.futures import as_completed
+from typing import Any, Callable
 
 import numpy.typing as npt
 from loky import get_reusable_executor
@@ -17,8 +19,8 @@ def _check_file(enter_file: Callable[[str], Any], filename: str) -> None:
 
 
 def _get_field_shapes(
-    reader: "BaseReader", path: str, step: int
-) -> Dict[str, Tuple[int, ...]]:
+    reader: BaseReader, path: str, step: int
+) -> dict[str, tuple[int, ...]]:
     names = reader.ReadCategoryNamesAtTimestep(
         path=path,
         category="fields",
@@ -36,7 +38,7 @@ def _get_field_shapes(
     }
 
 
-def _verify_particle_shapes(reader: "BaseReader", path: str, step: int) -> None:
+def _verify_particle_shapes(reader: BaseReader, path: str, step: int) -> None:
     prtl_species = reader.ReadParticleSpeciesAtTimestep(path=path, step=step)
     quantities = reader.ReadCategoryNamesAtTimestep(
         path=path,
@@ -44,7 +46,7 @@ def _verify_particle_shapes(reader: "BaseReader", path: str, step: int) -> None:
         prefix="p",
         step=step,
     )
-    quantities = set(q.split("_")[0] for q in quantities if q.startswith("p"))
+    quantities = {q.split("_")[0] for q in quantities if q.startswith("p")}
     for species in prtl_species:
         shape = None
         for quantity in quantities:
@@ -69,7 +71,7 @@ class BaseReader:
 
     """
 
-    skipped_files: List[str]
+    skipped_files: list[str]
 
     def __init__(self) -> None:
         """Initializer for the BaseReader class."""
@@ -109,8 +111,8 @@ class BaseReader:
         category: str,
         varname: str,
         newname: str,
-        valid_files: List[str],
-    ) -> Dict[str, npt.NDArray[Any]]:
+        valid_files: list[str],
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read a variable at each timestep and return a dictionary with the new name.
 
         Parameters
@@ -138,10 +140,10 @@ class BaseReader:
         self,
         path: str,
         category: str,
-        varnames: List[str],
-        newnames: List[str],
-        valid_files: List[str],
-    ) -> Dict[str, npt.NDArray[Any]]:
+        varnames: list[str],
+        newnames: list[str],
+        valid_files: list[str],
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read multiple variables at each timestep and return a dictionary with the new names.
 
         Parameters
@@ -169,15 +171,15 @@ class BaseReader:
         self,
         path: str,
         step: int,
-        species: List[int],
-    ) -> Dict[int, int]:
+        species: list[int],
+    ) -> dict[int, int]:
         """Return particle counts by species without reading particle arrays.
 
         Readers may override this method to collect all counts while opening the
         timestep only once.  The default implementation uses array-shape
         metadata and is kept for third-party readers.
         """
-        counts: Dict[int, int] = {}
+        counts: dict[int, int] = {}
         for sp in species:
             try:
                 counts[sp] = int(
@@ -197,7 +199,7 @@ class BaseReader:
         path: str,
         category: str,
         step: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Read the attributes of a given timestep.
 
         Parameters
@@ -221,7 +223,7 @@ class BaseReader:
         self,
         path: str,
         step: int,
-    ) -> Dict[str, npt.NDArray[Any]]:
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read the coordinates of cell edges at a given timestep.
 
         Parameters
@@ -273,7 +275,7 @@ class BaseReader:
         category: str,
         prefix: str,
         step: int,
-    ) -> Set[str]:
+    ) -> set[str]:
         """Read the names of the variables in a given category and timestep.
 
         Parameters
@@ -295,7 +297,7 @@ class BaseReader:
         """
         raise NotImplementedError("ReadCategoryNamesAtTimestep is not implemented")
 
-    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> Set[int]:
+    def ReadParticleSpeciesAtTimestep(self, path: str, step: int) -> set[int]:
         """Read the particle species indices at a given timestep.
 
         Parameters
@@ -311,10 +313,10 @@ class BaseReader:
             A set of particle species indices at a given timestep.
 
         """
-        return set(
+        return {
             int(f.split("_")[1])
             for f in self.ReadCategoryNamesAtTimestep(path, "particles", "p", step)
-        )
+        }
 
     def ReadArrayShapeAtTimestep(
         self,
@@ -322,7 +324,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> Tuple[int, ...]:
+    ) -> tuple[int, ...]:
         """Read the shape of an array at a given timestep.
 
         Parameters
@@ -350,7 +352,7 @@ class BaseReader:
         category: str,
         quantity: str,
         step: int,
-    ) -> Tuple[int, ...]:
+    ) -> tuple[int, ...]:
         """Read the shape of an array at a given timestep, without relying on metadata.
 
         Parameters
@@ -378,7 +380,7 @@ class BaseReader:
         self,
         path: str,
         step: int,
-    ) -> Dict[str, npt.NDArray[Any]]:
+    ) -> dict[str, npt.NDArray[Any]]:
         """Read the coordinates of the fields at a given timestep.
 
         Parameters
@@ -419,7 +421,7 @@ class BaseReader:
     # # # # # # # # # # # # # # # # # # # # # # # #
 
     @staticmethod
-    def CategoryFiles(path: str, category: str, format: str) -> List[str]:
+    def CategoryFiles(path: str, category: str, format: str) -> list[str]:
         """Get the list of files in a given category and format.
 
         Parameters
@@ -442,6 +444,8 @@ class BaseReader:
             If no files are found.
 
         """
+        if not os.path.exists(os.path.join(path, category)):
+            return []
         files = [
             f
             for f in os.listdir(os.path.join(path, category))
@@ -474,72 +478,13 @@ class BaseReader:
             path, category, f"{category}.{step:08d}.{self.format.value}"
         )
 
-    # def GetValidSteps(
-    #     self,
-    #     path: str,
-    #     category: str,
-    #     num_cpus: Optional[int] = None,
-    # ) -> List[int]:
-    #     """Get valid timesteps (sorted) in a given path and category.
-
-    #     Parameters
-    #     ----------
-    #     path : str
-    #         The path to the files.
-    #     category : str
-    #         The category of the files.
-    #     num_cpus : Optional[int]
-    #         The number of CPU cores to use for parallel processing.
-
-    #     Returns
-    #     -------
-    #     list[int]
-    #         A list of valid timesteps in the given path and category.
-
-    #     """
-    #     category_files = BaseReader.CategoryFiles(
-    #         path=path,
-    #         category=category,
-    #         format=self.format.value,
-    #     )
-    #     num_cpus = num_cpus if num_cpus is not None else (os.cpu_count() or 1)
-    #     executor = get_reusable_executor(max_workers=num_cpus)
-    #     futures = {
-    #         executor.submit(
-    #             _check_file,
-    #             self.EnterFile,
-    #             os.path.join(path, category, filename),
-    #         ): filename
-    #         for filename in category_files
-    #     }
-
-    #     steps: List[int] = []
-    #     for future in tqdm(
-    #         as_completed(futures),
-    #         total=len(futures),
-    #         desc=f"getting valid steps for {category}",
-    #         leave=False,
-    #     ):
-    #         filename = futures[future]
-    #         try:
-    #             future.result()
-    #             steps.append(int(filename.split(".")[1]))
-    #         except OSError:
-    #             if filename not in self.skipped_files:
-    #                 self.skipped_files.append(filename)
-    #                 logging.warning(f"Could not read {filename}, skipping it")
-    #         except Exception as e:
-    #             raise e
-    #     steps.sort()
-    #     return steps
-
     def GetValidFilesAndSteps(
         self,
         path: str,
         category: str,
-        steprange: Optional[Tuple[Union[int, None], Union[int, None]]] = None,
-        num_cpus: Optional[int] = None,
-    ) -> Tuple[List[str], List[int]]:
+        steprange: tuple[int | None, int | None] | None = None,
+        num_cpus: int | None = None,
+    ) -> tuple[list[str], list[int]]:
         """Get valid files (sorted by timestep) and steps in a given path and category.
 
         Parameters
@@ -548,9 +493,9 @@ class BaseReader:
             The path to the files.
         category : str
             The category of the files.
-        steprange : Optional[tuple[int | None, int | None]]
+        steprange : tuple[int | None, int | None] | None
             The range of timesteps to be considered. If None, all timesteps are considered.
-        num_cpus : Optional[int]
+        num_cpus : int | None
             The number of CPU cores to use for parallel processing.
 
         Returns
@@ -574,9 +519,7 @@ class BaseReader:
             start, end = steprange
             if start is not None and step < start:
                 return False
-            if end is not None and step >= end:
-                return False
-            return True
+            return not (end is not None and step >= end)
 
         futures = {
             executor.submit(
@@ -587,9 +530,10 @@ class BaseReader:
             for filename in category_files
             if is_inrange(filename)
         }
+        logger = logging.getLogger(__name__)
 
-        files: List[str] = []
-        steps: List[int] = []
+        files: list[str] = []
+        steps: list[int] = []
         for future in tqdm(
             as_completed(futures),
             total=len(futures),
@@ -604,9 +548,9 @@ class BaseReader:
             except OSError:
                 if filename not in self.skipped_files:
                     self.skipped_files.append(filename)
-                    logging.warning(f"Could not read {filename}, skipping it")
-            except Exception as e:
-                raise e
+                    logger.warning(f"Could not read {filename}, skipping it")
+            except Exception:
+                raise
         files.sort(key=lambda x: int(x.split(".")[1]))
         steps.sort()
         return (files, steps)
@@ -616,8 +560,8 @@ class BaseReader:
         path: str,
         category: str,
         prefix: str,
-        valid_steps: List[int],
-        num_cpus: Optional[int] = None,
+        valid_steps: list[int],
+        num_cpus: int | None = None,
     ):
         """Verify that all files in a given category have the same names.
 
@@ -631,7 +575,7 @@ class BaseReader:
             The prefix of the variables to be read.
         valid_steps : list[int]
             The valid timesteps to be checked.
-        num_cpus : Optional[int]
+        num_cpus : int | None
             The number of CPU cores to use for parallel processing.
 
         Raises
@@ -673,8 +617,8 @@ class BaseReader:
     def VerifySameFieldShapes(
         self,
         path: str,
-        valid_steps: List[int],
-        num_cpus: Optional[int] = None,
+        valid_steps: list[int],
+        num_cpus: int | None = None,
     ):
         """Verify that all fields in a given path have the same shape.
 
@@ -684,7 +628,7 @@ class BaseReader:
             The path to the files.
         valid_steps : list[int]
             The valid timesteps to be checked.
-        num_cpus : Optional[int]
+        num_cpus : int | None
             The number of CPU cores to use for parallel processing.
 
         Raises
@@ -723,8 +667,8 @@ class BaseReader:
     def VerifySameFieldLayouts(
         self,
         path: str,
-        valid_steps: List[int],
-        num_cpus: Optional[int] = None,
+        valid_steps: list[int],
+        num_cpus: int | None = None,
     ):
         """Verify that all timesteps in a given path have the same layout.
 
@@ -734,7 +678,7 @@ class BaseReader:
             The path to the files.
         valid_steps : list[int]
             The valid timesteps to be checked.
-        num_cpus : Optional[int]
+        num_cpus : int | None
             The number of CPU cores to use for parallel processing.
 
         Raises
@@ -774,8 +718,8 @@ class BaseReader:
     def VerifySameParticleShapes(
         self,
         path: str,
-        valid_steps: List[int],
-        num_cpus: Optional[int] = None,
+        valid_steps: list[int],
+        num_cpus: int | None = None,
     ):
         """Verify that all particle quantities in a given path have the same shape at specific timesteps.
 
@@ -785,7 +729,7 @@ class BaseReader:
             The path to the files.
         valid_steps : list[int]
             The valid timesteps to be checked.
-        num_cpus : Optional[int]
+        num_cpus : int | None
             The number of CPU cores to use for parallel processing.
 
         Raises
@@ -808,7 +752,7 @@ class BaseReader:
         ):
             future.result()
 
-    def DefinesCategory(self, path: str, category: str, valid_files: List[str]) -> bool:
+    def DefinesCategory(self, path: str, category: str, valid_files: list[str]) -> bool:
         """Check whether a given category is defined in the path.
 
         Parameters

@@ -6,11 +6,10 @@ import json
 import logging
 import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Union
 
 import pandas as pd
-
 
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"
 _STEP_RE = re.compile(r"^Step:\s+(\d+)\.+\[")
@@ -58,23 +57,24 @@ class Diagnostics:
 
     _CACHE_VERSION = 1
 
-    df: Optional[pd.DataFrame]
+    df: pd.DataFrame | None
     outfile: str
 
     def __init__(
         self,
-        path: Union[str, os.PathLike[str]],
+        path: str | os.PathLike[str],
         *,
         cache: bool = True,
         chunk_size: int = 100_000,
-        cache_path: Optional[Union[str, os.PathLike[str]]] = None,
+        cache_path: str | os.PathLike[str] | None = None,
     ) -> None:
         if chunk_size <= 0:
             raise ValueError("chunk_size must be greater than zero")
 
         outfile = self._find_outfile(Path(path))
+        logger = logging.getLogger(__name__)
         if outfile is None:
-            logging.warning("No .out files found in %s", path)
+            logger.warning("No .out files found in %s", path)
             self.df = None
             return
 
@@ -93,7 +93,7 @@ class Diagnostics:
                 self.df = pd.read_parquet(parquet_path)
                 return
             except (OSError, ValueError):
-                logging.warning(
+                logger.warning(
                     "Failed to read diagnostics cache %s; rebuilding it",
                     parquet_path,
                     exc_info=True,
@@ -108,7 +108,7 @@ class Diagnostics:
             self.df = self._combine_chunks(chunks)
 
     @staticmethod
-    def _find_outfile(path: Path) -> Optional[Path]:
+    def _find_outfile(path: Path) -> Path | None:
         if path.is_file():
             if path.suffix != ".out":
                 raise ValueError(f"Expected a .out file, got {path}")
@@ -141,7 +141,7 @@ class Diagnostics:
             return False
 
     @classmethod
-    def _cache_metadata(cls, source: Path) -> Dict[str, Union[int, str]]:
+    def _cache_metadata(cls, source: Path) -> dict[str, int | str]:
         stat = source.stat()
         return {
             "parser_version": cls._CACHE_VERSION,
@@ -212,8 +212,8 @@ class Diagnostics:
 
     @classmethod
     def _dataframe_chunks(cls, source: Path, chunk_size: int) -> Iterator[pd.DataFrame]:
-        records: List[Dict[str, Union[int, float]]] = []
-        columns: Optional[List[str]] = None
+        records: list[dict[str, float]] = []
+        columns: list[str] | None = None
 
         for record in cls._records(source):
             if columns is None:
@@ -237,13 +237,13 @@ class Diagnostics:
 
     @staticmethod
     def _make_dataframe(
-        records: List[Dict[str, Union[int, float]]], columns: List[str]
+        records: list[dict[str, float]], columns: list[str]
     ) -> pd.DataFrame:
         dataframe = pd.DataFrame.from_records(records, columns=columns)
         return dataframe.set_index("Step", drop=False)
 
     @staticmethod
-    def _combine_chunks(chunks: List[pd.DataFrame]) -> pd.DataFrame:
+    def _combine_chunks(chunks: list[pd.DataFrame]) -> pd.DataFrame:
         if chunks:
             return pd.concat(chunks)
         dataframe = pd.DataFrame(columns=["Step", "Time"])
@@ -251,8 +251,8 @@ class Diagnostics:
         return dataframe
 
     @staticmethod
-    def _records(source: Path) -> Iterator[Dict[str, Union[int, float]]]:
-        record: Optional[Dict[str, Union[int, float]]] = None
+    def _records(source: Path) -> Iterator[dict[str, float]]:
+        record: dict[str, float] | None = None
 
         with source.open("r", encoding="utf-8-sig", errors="replace") as stream:
             for line in stream:

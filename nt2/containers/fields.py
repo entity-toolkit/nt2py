@@ -1,12 +1,14 @@
-from typing import Any, Union, Dict
+from __future__ import annotations
+
+from typing import Any
 
 import dask
 import dask.array as da
 import xarray as xr
 from tqdm import tqdm
 
+from ..utils import CoordinateSystem, Layout
 from .base import BaseContainer
-from ..utils import Layout, CoordinateSystem
 
 
 def remap_fields_cart(name: str) -> str:
@@ -51,7 +53,7 @@ class FieldContainer(BaseContainer):
     """Parent class to manage the fields dataframe."""
 
     __fields_defined: bool = False
-    __fields: Union[xr.Dataset, None] = None
+    __fields: xr.Dataset | None = None
 
     def __init__(
         self,
@@ -76,7 +78,7 @@ class FieldContainer(BaseContainer):
         return self.__fields_defined
 
     @property
-    def fields(self) -> Union[xr.Dataset, None]:
+    def fields(self) -> xr.Dataset | None:
         """xr.Dataset: The fields dataframe."""
         return self.__fields
 
@@ -155,7 +157,11 @@ class FieldContainer(BaseContainer):
                     f"Coordinate system {attributes['Coordinates']} not supported."
                 )
 
-        if self.remap is None:
+        if (
+            self.remap is None
+            or self.remap.get("coords", None) is None
+            or self.remap.get("fields", None) is None
+        ):
             self.set_remap(
                 {
                     "coords": (
@@ -174,13 +180,13 @@ class FieldContainer(BaseContainer):
         # rename coordinates if remap is provided
         if self.remap is not None and "coords" in self.remap:
             new_coords = {}
-            for coord in coords.keys():
+            for coord in coords:
                 new_coords[self.remap["coords"](coord)] = coords[coord]
             coords = new_coords
 
         edge_coords = self.reader.ReadEdgeCoordsAtTimestep(self.path, first_step)
         new_edge_coords = {}
-        for coord in edge_coords.keys():
+        for coord in edge_coords:
             assoc_x = (
                 coord[:-1]
                 if (self.remap is None or "coords" not in self.remap)
@@ -233,7 +239,7 @@ class FieldContainer(BaseContainer):
         )
 
     @property
-    def attrs(self) -> Dict[str, Any]:
+    def attrs(self) -> dict[str, Any]:
         """dict: The attributes of the fields dataframe."""
         if self.fields_defined:
             return self.fields.attrs

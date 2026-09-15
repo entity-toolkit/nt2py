@@ -1,11 +1,13 @@
-from typing import Any, List, Union, Dict, Set
-import numpy.typing as npt
+from __future__ import annotations
+
+from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 
+from ..utils import CoordinateSystem
 from .base import BaseContainer
 from .particle_dataset import ParticleDataset
-from ..utils import CoordinateSystem
 
 
 def remap_prtl_quantities_cart(name: str) -> str:
@@ -38,14 +40,14 @@ class ParticleContainer(BaseContainer):
     """Parent class to manage the particles dataframe."""
 
     __particles_defined: bool = False
-    __particles: Union[ParticleDataset, None] = None
+    __particles: ParticleDataset | None = None
 
-    nonempty_steps: List[int]
-    attributes: Dict[str, Any]
-    quantities: List[str]
-    sp_with_idx: List[int]
-    sp_without_idx: List[int]
-    quantity_names_by_step: Dict[int, Set[str]]
+    nonempty_steps: list[int]
+    attributes: dict[str, Any]
+    quantities: list[str]
+    sp_with_idx: list[int]
+    sp_without_idx: list[int]
+    quantity_names_by_step: dict[int, set[str]]
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
@@ -128,15 +130,13 @@ class ParticleContainer(BaseContainer):
         quantities = sorted(np.unique([q for qtys in quantities_ for q in qtys]))
 
         unique_quantities = sorted(
-            list(
-                set(
-                    f"{q}".split("_")[0]
-                    for q in quantities
-                    if not q.startswith("pIDX") and not q.startswith("pRNK")
-                )
-            )
+            {
+                f"{q}".split("_")[0]
+                for q in quantities
+                if not q.startswith("pIDX") and not q.startswith("pRNK")
+            }
         )
-        all_species = sorted(list(set([int(f"{q}".split("_")[1]) for q in quantities])))
+        all_species = sorted({int(f"{q}".split("_")[1]) for q in quantities})
 
         sp_with_idx = sorted(
             [int(f"{q}".split("_")[1]) for q in quantities if f"{q}".startswith("pIDX")]
@@ -209,7 +209,7 @@ class ParticleContainer(BaseContainer):
         return self.__particles_defined
 
     @property
-    def particles(self) -> Union[ParticleDataset, None]:
+    def particles(self) -> ParticleDataset | None:
         """Returns the particles data.
 
         Returns
@@ -221,7 +221,7 @@ class ParticleContainer(BaseContainer):
         return self.__particles
 
     @property
-    def attrs(self) -> Dict[str, Any]:
+    def attrs(self) -> dict[str, Any]:
         """dict: The attributes of the particles dataframe."""
         if self.particles_defined:
             return self.attributes
@@ -251,7 +251,7 @@ class ParticleContainer(BaseContainer):
         read_colname: str,
         step: int,
         sp: int,
-    ) -> npt.NDArray[Union[np.float64, np.int64]]:
+    ) -> npt.NDArray[np.float64 | np.int64]:
         if f"{read_colname}_{sp}" in self.quantities:
             return self.reader.ReadArrayAtTimestep(
                 self.path, "particles", f"{read_colname}_{sp}", step
@@ -261,7 +261,7 @@ class ParticleContainer(BaseContainer):
 
     def _read_column(
         self, step: int, colname: str
-    ) -> npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]:
+    ) -> npt.NDArray[np.float64 | np.int64 | np.float32 | np.int32]:
         read_colname = None
         if colname == "id":
             idx = np.concatenate(

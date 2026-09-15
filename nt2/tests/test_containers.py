@@ -144,7 +144,7 @@ def test_fields(test, field_container: Union[Type[Data], Type[FieldContainer]]):
         for container in [Data, FieldContainer]
     ],
 )
-def test_missing_field_output_raises_file_not_found(
+def test_missing_field_output_is_undefined(
     test, field_container: Union[Type[Data], Type[FieldContainer]]
 ):
     reader: BaseReader = test["reader"]()
@@ -155,16 +155,20 @@ def test_missing_field_output_raises_file_not_found(
         "num_cpus": 1,
     }
 
-    with pytest.raises(FileNotFoundError, match="/fields"):
-        if field_container is Data:
-            field_container(
-                **kwargs,
-                fields=True,
-                particles=False,
-                spectra=False,
-            )
-        else:
-            field_container(**kwargs, coord_system=None)
+    if field_container is Data:
+        container = field_container(
+            **kwargs,
+            fields=True,
+            particles=False,
+            spectra=False,
+        )
+        assert not container.fields_defined, "Fields are unexpectedly defined"
+        with pytest.raises(ValueError, match="Fields are not defined"):
+            _ = container.fields
+    else:
+        container = field_container(**kwargs, coord_system=None)
+        assert not container.fields_defined, "Fields are unexpectedly defined"
+        assert container.fields is None, "Fields are not None"
 
 
 @pytest.mark.parametrize(

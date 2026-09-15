@@ -1,19 +1,38 @@
-from typing import Any, Union, Dict
+from __future__ import annotations
+
+from typing import Any
 
 import dask
 import dask.array as da
-import xarray as xr
 import numpy as np
+import xarray as xr
 from tqdm import tqdm
 
+from ..utils import CoordinateSystem
 from .base import BaseContainer
+
+
+def remap_coords_cart(name: str) -> str:
+    return {
+        "X1": "x",
+        "X2": "y",
+        "X3": "z",
+    }.get(name, name)
+
+
+def remap_coords_sph(name: str) -> str:
+    return {
+        "X1": "r",
+        "X2": "th",
+        "X3": "ph",
+    }.get(name, name)
 
 
 class SpectraContainer(BaseContainer):
     """Parent class to manage the spectra dataframe."""
 
     __spectra_defined: bool = False
-    __spectra: Union[xr.Dataset, None] = None
+    __spectra: xr.Dataset | None = None
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(category="spectra", **kwargs)
@@ -32,7 +51,7 @@ class SpectraContainer(BaseContainer):
         return self.__spectra_defined
 
     @property
-    def spectra(self) -> Union[xr.Dataset, None]:
+    def spectra(self) -> xr.Dataset | None:
         """xr.Dataset: The spectra dataframe."""
         return self.__spectra
 
@@ -68,24 +87,76 @@ class SpectraContainer(BaseContainer):
         spectra_names = self.reader.ReadCategoryNamesAtTimestep(
             self.path, "spectra", "s", first_step
         )
-        spectra_names = set(s for s in sorted(spectra_names) if s.startswith("sN"))
+        spectra_names = {s for s in sorted(spectra_names) if s.startswith("sN")}
         ebin_name = "sEbn"
         first_spectrum_name = next(iter(spectra_names))
         shape = self.reader.ReadArrayShapeExplicitlyAtTimestep(
             self.path, "spectra", first_spectrum_name, first_step
         )
 
-        ebins = self.reader.ReadArrayAtTimestep(
+        energy_binedges = self.reader.ReadArrayAtTimestep(
             self.path, "spectra", ebin_name, first_step
         )
+        num_spatial_dims = len(shape) - 1
 
-        diffs = np.diff(ebins)
-        if np.isclose(diffs[1] - diffs[0], diffs[-1] - diffs[-2], atol=1e-2):
-            ebins = 0.5 * (ebins[1:] + ebins[:-1])
+        x_binedges = [
+            self.reader.ReadArrayAtTimestep(
+                self.path, "spectra", f"sX{i + 1}bn", first_step
+            )
+            for i in range(num_spatial_dims)
+        ]
+
+        def edges_to_bins(edges: np.ndarray) -> np.ndarray:
+            diffs = np.diff(edges)
+            if len(diffs) == 1 or np.isclose(
+                diffs[1] - diffs[0], diffs[-1] - diffs[-2], atol=1e-2
+            ):
+                return 0.5 * (edges[1:] + edges[:-1])
+            else:
+                return (edges[1:] * edges[:-1]) ** 0.5
+
+        attributes = self.reader.ReadAttrsAtTimestep(
+            path=self.path, category="spectra", step=first_step
+        )
+        if self.coordinate_system is None:
+            if "Coordinates" not in attributes:
+                raise ValueError("Coordinates not found in attributes for particles.")
+            if attributes["Coordinates"] in [b"cart", "cart"]:
+                self.set_coordinate_system(CoordinateSystem.XYZ)
+            elif attributes["Coordinates"] in [b"sph", "sph", b"qsph", "qsph"]:
+                self.set_coordinate_system(CoordinateSystem.SPH)
+            else:
+                raise NotImplementedError(
+                    f"Coordinate system {attributes['Coordinates']} not supported."
+                )
+
+        if self.remap is None or self.remap.get("coords", None) is None:
+            self.set_remap(
+                {
+                    "coords": (
+                        remap_coords_cart
+                        if self.coordinate_system == CoordinateSystem.XYZ
+                        else remap_coords_sph
+                    ),
+                }
+            )
+
+        ebins = edges_to_bins(energy_binedges)
+        xbins = [edges_to_bins(xb) for xb in x_binedges]
+
+        if self.remap is not None and "coords" in self.remap:
+            new_xbins = {}
+            for i in range(num_spatial_dims):
+                new_xbins[self.remap["coords"](f"X{i + 1}")] = xbins[i]
+            xbins = new_xbins
         else:
-            ebins = (ebins[1:] * ebins[:-1]) ** 0.5
+            xbins = {f"X{i + 1}": xbins[i] for i in range(num_spatial_dims)}
 
-        all_dims = {"t": self.times, "E": ebins}
+        all_dims = {
+            "t": self.times,
+            **xbins,
+            "E": ebins,
+        }
         all_coords = {**all_dims, "s": ("t", self.steps)}
 
         attributes = self.reader.ReadAttrsAtTimestep(
@@ -131,7 +202,7 @@ class SpectraContainer(BaseContainer):
         )
 
     @property
-    def attrs(self) -> Dict[str, Any]:
+    def attrs(self) -> dict[str, Any]:
         """dict: The attributes of the spectra dataframe."""
         if self.spectra_defined:
             return self.spectra.attrs

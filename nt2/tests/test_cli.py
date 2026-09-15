@@ -127,5 +127,5 @@ def test_plot_without_fields_fails(test, monkeypatch, tmp_path):
     result = runner.invoke(app, ["plot", path, "--what", "fields", "--isel", "t=0"])
 
     assert result.exit_code == 1
-    assert isinstance(result.exception, FileNotFoundError)
-    assert str(result.exception).endswith("/fields'")
+    assert isinstance(result.exception, ValueError)
+    assert "Fields are not defined" in str(result.exception)

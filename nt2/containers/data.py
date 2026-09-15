@@ -1,31 +1,30 @@
-from typing import Callable, Any, Union, Optional, List, Dict, Tuple
+from __future__ import annotations
 
 import os
+from typing import Any, Callable
 
-import xarray as xr
 import pandas as pd
-
-from ..utils import (
-    ToHumanReadable,
-    DetermineDataFormat,
-    Format,
-    CoordinateSystem,
-    CoordinateSystemType,
-)
-from ..readers.base import BaseReader
-from ..readers.hdf5 import Reader as HDF5Reader
-from ..readers.adios2 import Reader as BP5Reader
-
-from .fields import FieldContainer
-from .particles import ParticleContainer
-from .particle_dataset import ParticleDataset
-from .spectra import SpectraContainer
-from .diagnostics import Diagnostics
+import xarray as xr
 
 from ..plotters.export import makeFramesAndMovie
+from ..readers.adios2 import Reader as BP5Reader
+from ..readers.base import BaseReader
+from ..readers.hdf5 import Reader as HDF5Reader
+from ..utils import (
+    CoordinateSystem,
+    CoordinateSystemType,
+    DetermineDataFormat,
+    Format,
+    ToHumanReadable,
+)
+from .diagnostics import Diagnostics
+from .fields import FieldContainer
+from .particle_dataset import ParticleDataset
+from .particles import ParticleContainer
+from .spectra import SpectraContainer
 
 
-def compactify(lst: Union[List[Any], Any]) -> str:
+def compactify(lst: list[Any] | Any) -> str:
     c = ""
     cntr = 0
     for l_ in lst:
@@ -40,10 +39,10 @@ def compactify(lst: Union[List[Any], Any]) -> str:
 class Data:
     """Main class to manage all the data containers."""
 
-    _fields: Optional[FieldContainer] = None
-    _particles: Optional[ParticleContainer] = None
-    _spectra: Optional[SpectraContainer] = None
-    _diagnostics: Optional[Diagnostics] = None
+    _fields: FieldContainer | None = None
+    _particles: ParticleContainer | None = None
+    _spectra: SpectraContainer | None = None
+    _diagnostics: Diagnostics | None = None
 
     def __init__(
         self,
@@ -53,12 +52,12 @@ class Data:
         spectra: bool = True,
         diagnostics: bool = False,
         verify: bool = False,
-        timerange: Optional[Tuple[Union[float, None], Union[float, None]]] = None,
-        steprange: Optional[Tuple[Union[int, None], Union[int, None]]] = None,
-        reader: Optional[BaseReader] = None,
-        remap: Optional[Dict[str, Callable[[str], str]]] = None,
-        coord_system: Optional[CoordinateSystemType] = None,
-        num_cpus: Optional[int] = min(os.cpu_count() or 1, 16),
+        timerange: tuple[float | None, float | None] | None = None,
+        steprange: tuple[int | None, int | None] | None = None,
+        reader: BaseReader | None = None,
+        remap: dict[str, Callable[[str], str]] | None = None,
+        coord_system: CoordinateSystemType | None = None,
+        num_cpus: int | None = min(os.cpu_count() or 1, 16),
     ):
         """Initializer for the Data class.
 
@@ -159,7 +158,7 @@ class Data:
             )
         if diagnostics:
             self._diagnostics = Diagnostics(path=path)
-        self.__attrs: Dict[str, Any] = {}
+        self.__attrs: dict[str, Any] = {}
         if self.fields_defined:
             self.__attrs.update(**self._fields.attrs)
         if self.particles_defined:
@@ -228,15 +227,15 @@ class Data:
         return self._diagnostics.df
 
     @property
-    def attrs(self) -> Dict[str, Any]:
+    def attrs(self) -> dict[str, Any]:
         """dict: The attributes of the data."""
         return self.__attrs
 
     def makeMovie(
         self,
         plot: Callable,
-        time: Optional[List[float]] = None,
-        num_cpus: Optional[int] = None,
+        time: list[float] | None = None,
+        num_cpus: int | None = None,
         **movie_kwargs: Any,
     ) -> bool:
         """Create animation with provided plot function.
@@ -268,9 +267,10 @@ class Data:
             raise ValueError("No time values found.")
         name: str = ""
         provided_name = movie_kwargs.pop("name", None)
-        if provided_name is not None:
-            name = provided_name
-        elif self.attrs.get("simulation.name", None) is None:
+        if (
+            provided_name is not None
+            or self.attrs.get("simulation.name", None) is not None
+        ):
             name = provided_name
         else:
             name_b = self.attrs.get("simulation.name")
@@ -298,11 +298,19 @@ class Data:
             string += "==============\n"
             string += f"| Coordinates:\n|   {self._fields.coordinate_system.value}\n|\n"
             string += f"| Data axes:\n|   {compactify(self.fields.indexes.keys())}\n|\n"
-            delta_t = (
-                self.fields.coords["t"].values[1] - self.fields.coords["t"].values[0]
-            ) / (self.fields.coords["s"].values[1] - self.fields.coords["s"].values[0])
-            string += f"|   - dt: {delta_t:.2e}\n"
-            for key in self.fields.coords.keys():
+            if (
+                len(self.fields.coords["t"].values) > 1
+                and len(self.fields.coords["s"].values) > 1
+            ):
+                delta_t = (
+                    self.fields.coords["t"].values[1]
+                    - self.fields.coords["t"].values[0]
+                ) / (
+                    self.fields.coords["s"].values[1]
+                    - self.fields.coords["s"].values[0]
+                )
+                string += f"|   - dt: {delta_t:.2e}\n"
+            for key in self.fields.coords:
                 crd = self.fields.coords[key].values
                 fmt = ""
                 if key != "s":
@@ -343,7 +351,7 @@ class Data:
                 self.spectra.coords["s"].values[1] - self.spectra.coords["s"].values[0]
             )
             string += f"|   - dt: {delta_t:.2e}\n"
-            for key in self.spectra.coords.keys():
+            for key in self.spectra.coords:
                 crd = self.spectra.coords[key].values
                 fmt = ""
                 if key != "s":

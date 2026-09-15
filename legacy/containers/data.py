@@ -1,7 +1,6 @@
-from typing import Callable, Any, Union, Optional, List, Dict
-
-import sys
 import logging
+import sys
+from typing import Any, Callable, Dict, List, Optional, Union
 
 if sys.version_info >= (3, 12):
     from typing import override
@@ -11,30 +10,28 @@ else:
         return method
 
 
-from nt2.utils import ToHumanReadable
-
-import xarray as xr
 import pandas as pd
+import xarray as xr
 
-from nt2.utils import (
-    DetermineDataFormat,
-    InheritClassDocstring,
-    Format,
-    CoordinateSystem,
-)
-from nt2.readers.base import BaseReader
-from nt2.readers.hdf5 import Reader as HDF5Reader
-from nt2.readers.adios2 import Reader as BP5Reader
+import nt2.plotters.inspect as acc_inspect
+import nt2.plotters.movie as acc_movie
+import nt2.plotters.particles as acc_particles
+import nt2.plotters.polar as acc_polar
+from nt2.containers.diagnostics import Diagnostics
 from nt2.containers.fields import Fields
 from nt2.containers.particles import Particles
 from nt2.containers.spectra import Spectra
-from nt2.containers.diagnostics import Diagnostics
-
-import nt2.plotters.polar as acc_polar
-import nt2.plotters.particles as acc_particles
-import nt2.plotters.inspect as acc_inspect
-import nt2.plotters.movie as acc_movie
 from nt2.plotters.export import makeFramesAndMovie
+from nt2.readers.adios2 import Reader as BP5Reader
+from nt2.readers.base import BaseReader
+from nt2.readers.hdf5 import Reader as HDF5Reader
+from nt2.utils import (
+    CoordinateSystem,
+    DetermineDataFormat,
+    Format,
+    InheritClassDocstring,
+    ToHumanReadable,
+)
 
 
 @xr.register_dataset_accessor("polar")

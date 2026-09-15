@@ -161,3 +161,9 @@ temp/
 .codex
 .agents
 .claude
+
+# devenv
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+.direnv

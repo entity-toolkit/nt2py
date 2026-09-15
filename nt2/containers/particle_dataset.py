@@ -1,32 +1,26 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from copy import copy
 from typing import (
     Any,
     Callable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
     Literal,
-    Union,
-    Dict,
-    Type,
     cast,
 )
-import numpy.typing as npt
-from copy import copy
 
 import dask
 import dask.dataframe as dd
+import matplotlib.axes as maxes
+import matplotlib.pyplot as plt
+import numpy as np
+import numpy.typing as npt
+import pandas as pd
 from dask.delayed import Delayed
 from dask.optimization import cull
-import pandas as pd
-import numpy as np
 
-import matplotlib.pyplot as plt
-import matplotlib.axes as maxes
-
-
-IntSelector = Union[int, Sequence[int], slice, Tuple[int, int]]
-FloatSelector = Union[float, slice, Sequence[float], Tuple[float, float]]
+IntSelector = int | Sequence[int] | slice | tuple[int, int]
+FloatSelector = float | slice | Sequence[float] | tuple[float, float]
 
 
 def _cull_dataframe_graph(ddf: dd.DataFrame) -> dd.DataFrame:
@@ -47,12 +41,12 @@ class Selection:
     def __init__(
         self,
         type: Literal["value", "range", "list"],
-        value: Optional[Union[int, float, list, tuple]] = None,
+        value: float | list | tuple | None = None,
     ):
         self.type = type
         self.value = value
 
-    def intersect(self, other: "Selection") -> "Selection":
+    def intersect(self, other: Selection) -> Selection:
         if self.value is None:
             return copy(other)
         elif other.value is None:
@@ -92,9 +86,9 @@ class Selection:
             lo, hi = other.value
             new_values = [v for v in self.value if lo <= v <= hi]
             return Selection("list", new_values)
-        elif self.type == "range" and other.type == "value":
-            return other.intersect(self)
-        elif self.type == "range" and other.type == "list":
+        elif (self.type == "range" and other.type == "value") or (
+            self.type == "range" and other.type == "list"
+        ):
             return other.intersect(self)
         elif self.type == "range" and other.type == "range":
             assert isinstance(self.value, tuple) and len(self.value) == 2, (
@@ -139,13 +133,13 @@ class Selection:
 
 
 def _coerce_selector_to_mask(
-    s: Union[IntSelector, FloatSelector],
+    s: IntSelector | FloatSelector,
     series: Any,
     inclusive_tuple: bool = True,
     method="exact",
 ):
-    from operator import ior
     from functools import reduce
+    from operator import ior
 
     if isinstance(s, slice):
         lo = s.start if s.start is not None else -np.inf
@@ -178,7 +172,7 @@ def _coerce_selector_to_mask(
 
 def _attach_columns(
     part: pd.DataFrame,
-    cols_tuple: Tuple[str, ...],
+    cols_tuple: tuple[str, ...],
     read_column: Callable[[int, str], npt.NDArray[Any]],
     metadtypes: Any,
 ) -> pd.DataFrame:
@@ -198,7 +192,7 @@ def _attach_columns(
 def _load_index_partition(
     st: int,
     t: float,
-    index_cols: Tuple[str, ...],
+    index_cols: tuple[str, ...],
     read_column: Callable[[int, str], npt.NDArray[Any]],
 ) -> pd.DataFrame:
     cols = {c: read_column(st, c) for c in index_cols}
@@ -216,22 +210,22 @@ def _load_index_partition(
 class ParticleDataset:
     steps: npt.NDArray[np.int64]
     times: npt.NDArray[np.float64]
-    colnames: List[str]
+    colnames: list[str]
     _ddf_index: dd.DataFrame
 
     def __init__(
         self,
-        species: List[int],
+        species: list[int],
         steps: npt.NDArray[np.int64],
         times: npt.NDArray[np.float64],
-        colnames: List[str],
+        colnames: list[str],
         read_column: Callable[
-            [int, str], npt.NDArray[Union[np.float64, np.int64, np.float32, np.int32]]
+            [int, str], npt.NDArray[np.float64 | np.int64 | np.float32 | np.int32]
         ],
-        fprec: Optional[Type] = np.float32,
-        selection: Optional[Dict[str, Selection]] = None,
-        ddf_index: Optional[dd.DataFrame] = None,
-        partition_lengths: Optional[Sequence[int]] = None,
+        fprec: type | None = np.float32,
+        selection: dict[str, Selection] | None = None,
+        ddf_index: dd.DataFrame | None = None,
+        partition_lengths: Sequence[int] | None = None,
     ):
         self.species = species
         self.steps = steps
@@ -241,7 +235,7 @@ class ParticleDataset:
         self.read_column = read_column
         self.fprec = fprec
         self.index_cols = ("id", "sp")
-        self._all_columns_cache: Optional[List[str]] = None
+        self._all_columns_cache: list[str] | None = None
         self._partition_lengths = (
             tuple(int(length) for length in partition_lengths)
             if partition_lengths is not None
@@ -280,7 +274,7 @@ class ParticleDataset:
 
         if ddf_index is not None:
             self._ddf_index = ddf_index
-            self._partition_indices: Optional[Tuple[int, ...]] = None
+            self._partition_indices: tuple[int, ...] | None = None
         else:
             self._ddf_index = self._build_index_ddf()
             self._partition_indices = tuple(range(self._ddf_index.npartitions))
@@ -318,19 +312,19 @@ class ParticleDataset:
         return int(sum(self._partition_lengths) * bytes_per_row)
 
     @property
-    def columns(self) -> List[str]:
+    def columns(self) -> list[str]:
         if self._all_columns_cache is None:
             self._all_columns_cache = self.colnames
         return self._all_columns_cache
 
     def sel(
         self,
-        t: Optional[Union[IntSelector, FloatSelector]] = None,
-        st: Optional[IntSelector] = None,
-        sp: Optional[IntSelector] = None,
-        id: Optional[IntSelector] = None,
+        t: IntSelector | FloatSelector | None = None,
+        st: IntSelector | None = None,
+        sp: IntSelector | None = None,
+        id: IntSelector | None = None,
         method: str = "exact",
-    ) -> "ParticleDataset":
+    ) -> ParticleDataset:
         ddf: dd.DataFrame = self._ddf_index
         new_selection = {k: copy(v) for k, v in self.selection.items()}
         if st is not None:
@@ -381,8 +375,8 @@ class ParticleDataset:
         return result
 
     def isel(
-        self, t: Optional[IntSelector] = None, st: Optional[IntSelector] = None
-    ) -> "ParticleDataset":
+        self, t: IntSelector | None = None, st: IntSelector | None = None
+    ) -> ParticleDataset:
         ddf: dd.DataFrame = self._ddf_index
         partition_indices = self._partition_indices
         partition_lengths = self._partition_lengths
@@ -479,7 +473,7 @@ class ParticleDataset:
         ddf = cast(dd.DataFrame, dd.from_delayed(delayed_parts, meta=meta))
         return ddf
 
-    def load(self, cols: Optional[Sequence[str]] = None) -> pd.DataFrame:
+    def load(self, cols: Sequence[str] | None = None) -> pd.DataFrame:
         if cols is None:
             cols = self.columns
 
@@ -543,9 +537,9 @@ class ParticleDataset:
 
     def spectrum_plot(
         self,
-        ax: Optional[maxes.Axes] = None,
-        bins: Optional[npt.NDArray] = None,
-        quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
+        ax: maxes.Axes | None = None,
+        bins: npt.NDArray | None = None,
+        quantity: Callable[[pd.DataFrame], npt.NDArray] | None = None,
     ):
         if ax is None:
             ax = plt.gca()
@@ -601,10 +595,10 @@ class ParticleDataset:
 
     def phase_plot(
         self,
-        ax: Optional[maxes.Axes] = None,
-        x_quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
-        y_quantity: Optional[Callable[[pd.DataFrame], npt.NDArray]] = None,
-        xy_bins: Optional[Tuple[npt.NDArray, npt.NDArray]] = None,
+        ax: maxes.Axes | None = None,
+        x_quantity: Callable[[pd.DataFrame], npt.NDArray] | None = None,
+        y_quantity: Callable[[pd.DataFrame], npt.NDArray] | None = None,
+        xy_bins: tuple[npt.NDArray, npt.NDArray] | None = None,
         **kwargs: Any,
     ):
         if ax is None:

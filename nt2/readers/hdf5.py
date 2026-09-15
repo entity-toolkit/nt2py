@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING, List, Dict, Tuple, Set
-
 import sys
+from typing import TYPE_CHECKING, Any
+
 from tqdm import tqdm
 
 if sys.version_info >= (3, 12):
@@ -13,8 +13,9 @@ else:
         return method
 
 
-import re
 import os
+import re
+
 import numpy as np
 import numpy.typing as npt
 
@@ -26,8 +27,8 @@ except ImportError:  # pragma: no cover
 if TYPE_CHECKING:
     import h5py as _h5py
 
-from nt2.utils import Format, Layout
 from nt2.readers.base import BaseReader
+from nt2.utils import Format, Layout
 
 
 def _require_h5py():
@@ -41,9 +42,9 @@ def _require_h5py():
 
 class Reader(BaseReader):
     @staticmethod
-    def __extract_step0(f: "_h5py.File") -> "_h5py.Group":
+    def __extract_step0(f: _h5py.File) -> _h5py.Group:
         h5 = _require_h5py()
-        if "Step0" in f.keys():
+        if "Step0" in f:
             f0 = f["Step0"]
             if isinstance(f0, h5.Group):
                 return f0
@@ -61,7 +62,7 @@ class Reader(BaseReader):
     @override
     def EnterFile(
         filename: str,
-    ) -> "_h5py.File":
+    ) -> _h5py.File:
         h5 = _require_h5py()
         return h5.File(filename, "r")
 
@@ -72,9 +73,9 @@ class Reader(BaseReader):
         category: str,
         varname: str,
         newname: str,
-        valid_files: List[str],
-    ) -> Dict[str, npt.NDArray[Any]]:
-        variables: List[Any] = []
+        valid_files: list[str],
+    ) -> dict[str, npt.NDArray[Any]]:
+        variables: list[Any] = []
         h5 = _require_h5py()
         for filename in tqdm(
             valid_files,
@@ -84,7 +85,7 @@ class Reader(BaseReader):
         ):
             with h5.File(os.path.join(path, category, filename), "r") as f:
                 f0 = Reader.__extract_step0(f)
-                if varname in f0.keys():
+                if varname in f0:
                     var = f0[varname]
                     if isinstance(var, h5.Dataset):
                         variables.append(var[()])
@@ -102,10 +103,10 @@ class Reader(BaseReader):
         self,
         path: str,
         category: str,
-        varnames: List[str],
-        newnames: List[str],
-        valid_files: List[str],
-    ) -> Dict[str, npt.NDArray[Any]]:
+        varnames: list[str],
+        newnames: list[str],
+        valid_files: list[str],
+    ) -> dict[str, npt.NDArray[Any]]:
         variables = {newname: [] for newname in newnames}
         h5 = _require_h5py()
         for filename in tqdm(
@@ -117,7 +118,7 @@ class Reader(BaseReader):
             with h5.File(os.path.join(path, category, filename), "r") as f:
                 f0 = Reader.__extract_step0(f)
                 for varname, newname in zip(varnames, newnames):
-                    if varname in f0.keys():
+                    if varname in f0:
                         var = f0[varname]
                         if isinstance(var, h5.Dataset):
                             variables[newname].append(var[()])
@@ -134,8 +135,8 @@ class Reader(BaseReader):
 
     @override
     def ReadParticleCountsAtTimestep(
-        self, path: str, step: int, species: List[int]
-    ) -> Dict[int, int]:
+        self, path: str, step: int, species: list[int]
+    ) -> dict[int, int]:
         """Read all per-species counts from one HDF5 file's metadata."""
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, "particles", step), "r") as f:
@@ -153,7 +154,7 @@ class Reader(BaseReader):
         path: str,
         category: str,
         step: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             return {k: v for k, v in f.attrs.items()}
@@ -163,7 +164,7 @@ class Reader(BaseReader):
         self,
         path: str,
         step: int,
-    ) -> Dict[str, npt.NDArray[Any]]:
+    ) -> dict[str, npt.NDArray[Any]]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -180,7 +181,7 @@ class Reader(BaseReader):
         h5 = _require_h5py()
         with h5.File(filename := self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            if quantity in f0.keys():
+            if quantity in f0:
                 var = f0[quantity]
                 if isinstance(var, h5.Dataset):
                     return np.array(var[:])
@@ -196,21 +197,21 @@ class Reader(BaseReader):
         category: str,
         prefix: str,
         step: int,
-    ) -> Set[str]:
+    ) -> set[str]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            keys: List[str] = list(f0.keys())
-            return set(c for c in keys if c.startswith(prefix))
+            keys: list[str] = list(f0.keys())
+            return {c for c in keys if c.startswith(prefix)}
 
     @override
     def ReadArrayShapeAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> Tuple[int, ...]:
+    ) -> tuple[int, ...]:
         h5 = _require_h5py()
         with h5.File(filename := self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            if quantity in f0.keys():
+            if quantity in f0:
                 var = f0[quantity]
                 if isinstance(var, h5.Dataset):
                     return var.shape
@@ -226,11 +227,11 @@ class Reader(BaseReader):
     @override
     def ReadArrayShapeExplicitlyAtTimestep(
         self, path: str, category: str, quantity: str, step: int
-    ) -> Tuple[int, ...]:
+    ) -> tuple[int, ...]:
         h5 = _require_h5py()
         with h5.File(self.FullPath(path, category, step), "r") as f:
             f0 = Reader.__extract_step0(f)
-            if quantity in f0.keys():
+            if quantity in f0:
                 var = f0[quantity]
                 if isinstance(var, h5.Dataset) and (read := var[:]) is not None:
                     return read.shape
@@ -246,7 +247,7 @@ class Reader(BaseReader):
     @override
     def ReadFieldCoordsAtTimestep(
         self, path: str, step: int
-    ) -> Dict[str, npt.NDArray[Any]]:
+    ) -> dict[str, npt.NDArray[Any]]:
         h5 = _require_h5py()
         with h5.File(filename := self.FullPath(path, "fields", step), "r") as f:
             f0 = Reader.__extract_step0(f)
@@ -256,9 +257,9 @@ class Reader(BaseReader):
                 if isinstance(f0_c, h5.Dataset):
                     return f0_c[:]
                 else:
-                    raise ValueError(f"Field {c} is not a group in the {filename}")
+                    raise TypeError(f"Field {c} is not a group in the {filename}")
 
-            keys: List[str] = list(f0.keys())
+            keys: list[str] = list(f0.keys())
             return {c: get_coord(c) for c in keys if re.match(r"^X[1|2|3]$", c)}
 
     @override
