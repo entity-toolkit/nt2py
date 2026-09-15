@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import os
-from typing import Annotated
+from typing import Annotated, Dict, Union
 
 import matplotlib.pyplot as plt
 import typer
@@ -28,11 +26,11 @@ def check_path(path: str) -> str:
     return path
 
 
-def check_sel(sel: str) -> dict[str, float | slice]:
+def check_sel(sel: str) -> Dict[str, Union[float, slice]]:
     if sel == "":
         return {}
     sel_list = sel.strip().split(";")
-    sel_dict: dict[str, float | slice] = {}
+    sel_dict: Dict[str, Union[float, slice]] = {}
     for _, s in enumerate(sel_list):
         coord, arg = s.strip().split("=", 1)
         coord = coord.strip()
@@ -136,10 +134,10 @@ def plot(
         if sel != {}:
             slices = {}
             sels = {}
-            slices: dict[str, slice | float] = {
+            slices: Dict[str, Union[slice, float]] = {
                 k: v for k, v in sel.items() if isinstance(v, slice)
             }
-            sels: dict[str, slice | float] = {
+            sels: Dict[str, Union[slice, float]] = {
                 k: v for k, v in sel.items() if not isinstance(v, slice)
             }
             d = d.sel(**sels, method="nearest")
