@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Sequence
 from copy import copy
 from typing import (
@@ -19,8 +20,12 @@ import pandas as pd
 from dask.delayed import Delayed
 from dask.optimization import cull
 
-IntSelector = int | Sequence[int] | slice | tuple[int, int]
-FloatSelector = float | slice | Sequence[float] | tuple[float, float]
+if sys.version_info >= (3, 10):
+    IntSelector = int | Sequence[int] | slice | tuple[int, int]
+    FloatSelector = float | slice | Sequence[float] | tuple[float, float]
+else:
+    IntSelector = Any
+    FloatSelector = Any
 
 
 def _cull_dataframe_graph(ddf: dd.DataFrame) -> dd.DataFrame:
