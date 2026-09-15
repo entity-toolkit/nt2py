@@ -1,17 +1,19 @@
 name: Unit tests
 
-on: [push]
+on:
+  push:
+  workflow_call:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           lfs: true
 
@@ -28,9 +30,3 @@ jobs:
       - name: Test with `pytest`
         run: |
           pytest
-
-      - name: Publish package
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags') && matrix.python-version == '3.14'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
-from typing import Any, Dict
 
 from nt2.utils import DataIs2DPolar
 
@@ -176,7 +179,7 @@ class ds_accessor:
         fxs = self._obj[fr] * np.sin(ths) + self._obj[fth] * np.cos(ths)
         fys = self._obj[fr] * np.cos(ths) - self._obj[fth] * np.sin(ths)
 
-        props: Dict[str, Any] = {
+        props: dict[str, Any] = {
             "method": "nearest",
             "bounds_error": False,
             "fill_value": 0,
@@ -188,8 +191,9 @@ class ds_accessor:
         ]
 
     def _fieldline(self, interp_fx, interp_fy, r_th_start, **kwargs):
-        import numpy as np
         from copy import copy
+
+        import numpy as np
 
         direction = kwargs.pop("direction", "both")
         stopWhen = kwargs.pop("stopWhen", lambda _, __: False)
@@ -292,10 +296,9 @@ class accessor:
         Additional keyword arguments are passed to `pcolormesh`.
         """
 
-        import matplotlib.pyplot as plt
-        from matplotlib import colors
-        from matplotlib import tri
         import matplotlib as mpl
+        import matplotlib.pyplot as plt
+        from matplotlib import colors, tri
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         ax = kwargs.pop("ax", plt.gca())
@@ -434,6 +437,7 @@ class accessor:
         """
 
         import warnings
+
         import matplotlib.pyplot as plt
 
         ax = kwargs.pop("ax", plt.gca())

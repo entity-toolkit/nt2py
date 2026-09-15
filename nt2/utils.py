@@ -1,10 +1,12 @@
-from typing import Union
-from enum import Enum
+from __future__ import annotations
+
+import inspect
 import os
 import re
-import inspect
-import numpy as np
+from enum import Enum
+from typing import Literal
 
+import numpy as np
 import xarray as xr
 
 
@@ -25,6 +27,19 @@ class Layout(Enum):
 class CoordinateSystem(Enum):
     XYZ = "Cartesian"
     SPH = "Spherical"
+
+    @staticmethod
+    def from_str(s):
+        s = s.lower()
+        if s in ("cartesian", "xyz"):
+            return CoordinateSystem.XYZ
+        elif s in ("spherical", "sph"):
+            return CoordinateSystem.SPH
+        else:
+            raise ValueError(f"Unknown coordinate system: {s}")
+
+
+CoordinateSystemType = Literal["XYZ", "SPH"]
 
 
 def DetermineDataFormat(path: str) -> Format:
@@ -64,7 +79,7 @@ def DetermineDataFormat(path: str) -> Format:
     raise ValueError("Could not determine file format.")
 
 
-def ToHumanReadable(num: Union[float, int], suffix: str = "B") -> str:
+def ToHumanReadable(num: float, suffix: str = "B") -> str:
     """Convert a number to a human-readable format with SI prefixes.
 
     Parameters
