@@ -1,7 +1,10 @@
-from typing import Union, Dict
-import typer, nt2, os
-from typing_extensions import Annotated
+import os
+from typing import Annotated, Dict, Union
+
 import matplotlib.pyplot as plt
+import typer
+
+import nt2
 
 app = typer.Typer()
 
@@ -23,18 +26,18 @@ def check_path(path: str) -> str:
     return path
 
 
-def check_sel(sel: str) -> Dict[str, Union[int, float, slice]]:
+def check_sel(sel: str) -> Dict[str, Union[float, slice]]:
     if sel == "":
         return {}
     sel_list = sel.strip().split(";")
-    sel_dict: Dict[str, Union[int, float, slice]] = {}
+    sel_dict: Dict[str, Union[float, slice]] = {}
     for _, s in enumerate(sel_list):
         coord, arg = s.strip().split("=", 1)
         coord = coord.strip()
         arg_exec = eval(arg.strip())
-        assert isinstance(
-            arg_exec, (int, float, slice)
-        ), f"Invalid selection argument for '{coord}': {arg_exec}. Must be int, float, or slice."
+        assert isinstance(arg_exec, (int, float, slice)), (
+            f"Invalid selection argument for '{coord}': {arg_exec}. Must be int, float, or slice."
+        )
         sel_dict[coord] = arg_exec
     return sel_dict
 
@@ -122,19 +125,19 @@ def plot(
 ):
     fname = os.path.basename(path.strip("/"))
     data = nt2.Data(path)
-    assert isinstance(
-        sel, dict
-    ), f"Invalid selection format: {sel}. Must be a dictionary."
+    assert isinstance(sel, dict), (
+        f"Invalid selection format: {sel}. Must be a dictionary."
+    )
     assert isinstance(isel, dict), f"Invalid isel format: {isel}. Must be a dictionary."
     if what == "fields":
         d = data.fields
         if sel != {}:
             slices = {}
             sels = {}
-            slices: Dict[str, Union[slice, float, int]] = {
+            slices: Dict[str, Union[slice, float]] = {
                 k: v for k, v in sel.items() if isinstance(v, slice)
             }
-            sels: Dict[str, Union[slice, float, int]] = {
+            sels: Dict[str, Union[slice, float]] = {
                 k: v for k, v in sel.items() if not isinstance(v, slice)
             }
             d = d.sel(**sels, method="nearest")

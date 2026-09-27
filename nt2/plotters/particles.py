@@ -1,7 +1,8 @@
-import xarray as xr
+from __future__ import annotations
+
 import numpy as np
 import numpy.typing as npt
-from typing import Optional, Tuple
+import xarray as xr
 
 
 class ds_accessor:
@@ -12,10 +13,10 @@ class ds_accessor:
         self,
         x: str = "x",
         y: str = "ux",
-        xbins: Optional[npt.NDArray] = None,
-        ybins: Optional[npt.NDArray] = None,
-        xlims: Optional[Tuple[float, float]] = None,
-        ylims: Optional[Tuple[float, float]] = None,
+        xbins: npt.NDArray | None = None,
+        ybins: npt.NDArray | None = None,
+        xlims: tuple[float, float] | None = None,
+        ylims: tuple[float, float] | None = None,
         xnbins: int = 100,
         ynbins: int = 100,
         **kwargs,
@@ -57,12 +58,12 @@ class ds_accessor:
         --------
         >>> ds.phaseplot(x='x', y='ux', xbins=np.linspace(0, 1000, 100), ybins=np.linspace(-5, 5, 50))
         """
-        assert x in list(self._obj.keys()) and y in list(
-            self._obj.keys()
-        ), "x and y must be valid variable names in the dataset"
-        assert (
-            len(self._obj[x].dims) == 1 and len(self._obj[y].dims) == 1
-        ), "x and y must be 1D variables"
+        assert x in list(self._obj.keys()) and y in list(self._obj.keys()), (
+            "x and y must be valid variable names in the dataset"
+        )
+        assert len(self._obj[x].dims) == 1 and len(self._obj[y].dims) == 1, (
+            "x and y must be 1D variables"
+        )
         assert "t" not in self._obj.dims, "Dataset must not have time dimension"
 
         import matplotlib.pyplot as plt

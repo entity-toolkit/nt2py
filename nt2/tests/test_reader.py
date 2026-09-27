@@ -12,16 +12,16 @@ def pytest_generate_tests(metafunc):
 
 def check_equal_arrays(arr1, arr2):
     if isinstance(arr1, set):
-        assert len(arr1) == len(
-            arr2
-        ), f"Set lengths do not match: {len(arr1)} != {len(arr2)}"
+        assert len(arr1) == len(arr2), (
+            f"Set lengths do not match: {len(arr1)} != {len(arr2)}"
+        )
         assert arr1 == arr2, f"Sets do not match: {arr1} != {arr2}"
     else:
         arr1 = np.array(arr1)
         arr2 = np.array(arr2)
-        assert (
-            arr1.shape == arr2.shape
-        ), f"Shapes do not match: {arr1.shape} != {arr2.shape}"
+        assert arr1.shape == arr2.shape, (
+            f"Shapes do not match: {arr1.shape} != {arr2.shape}"
+        )
         assert np.all(np.isclose(arr1, arr2)), f"Arrays do not match: {arr1} != {arr2}"
 
 
@@ -78,9 +78,9 @@ def test_reader(test):
 
         field_names = test["fields"].get(
             "quantities",
-            [f"{f}{i+1}" for i in range(3) for f in "BE"]
+            [f"{f}{i + 1}" for i in range(3) for f in "BE"]
             + [f"N_{i}" for i in ["1_2", "3_4"]]
-            + [f"T0{c+1}_{i+1}" for i in range(4) for c in range(3)],
+            + [f"T0{c + 1}_{i + 1}" for i in range(4) for c in range(3)],
         )
         field_names = set(f"f{f}" for f in field_names)
         # Check that invalid_tstep raises OSError in fields
@@ -92,13 +92,20 @@ def test_reader(test):
                 OSError,
             )
 
+        valid_files, valid_steps = reader.GetValidFilesAndSteps(
+            path=PATH, category="fields"
+        )
+
         # Check that timesteps are read correctly from fields
-        times = reader.ReadPerTimestepVariable(
-            path=PATH, category="fields", varname="Time", newname="t"
-        )["t"]
-        steps = reader.ReadPerTimestepVariable(
-            path=PATH, category="fields", varname="Step", newname="s"
-        )["s"]
+        timestep_variables = reader.ReadPerTimestepVariables(
+            path=PATH,
+            category="fields",
+            varnames=["Time", "Step"],
+            newnames=["t", "s"],
+            valid_files=valid_files,
+        )
+        times = timestep_variables["t"]
+        steps = timestep_variables["s"]
         check_equal_arrays(
             times,
             np.array([s * dt for s in steps]),
@@ -119,7 +126,6 @@ def test_reader(test):
             check_equal_arrays(coords["X2"], x2)
 
             if test["dim"] == "3D":
-                sx3 = test["fields"]["sx3"]
                 x3min = dx / 2
                 nx3 = test["fields"]["nx3"]
                 x3 = np.array([x3min + i * dx for i in range(int(nx3))])
@@ -140,18 +146,26 @@ def test_reader(test):
                 shape, (nx1, nx2, nx3) if layout == Layout.R else (nx3, nx2, nx1)
             )
 
-        for step in reader.GetValidSteps(path=PATH, category="fields"):
+        for step in valid_steps:
             for f in field_names:
                 field = reader.ReadArrayAtTimestep(
-                    path=PATH, category="fields", quantity=f, step=step
+                    path=PATH,
+                    category="fields",
+                    quantity=f,
+                    step=step,
                 )
                 check_equal_arrays(field.shape, shape)
 
-        reader.VerifySameCategoryNames(path=PATH, category="fields", prefix="f")
-        reader.VerifySameFieldLayouts(path=PATH)
+        reader.VerifySameCategoryNames(
+            path=PATH,
+            category="fields",
+            prefix="f",
+            valid_steps=valid_steps,
+        )
+        reader.VerifySameFieldLayouts(path=PATH, valid_steps=valid_steps)
 
         # Check that the shapes of the fields are read correctly
-        reader.VerifySameFieldShapes(path=PATH)
+        reader.VerifySameFieldShapes(path=PATH, valid_steps=valid_steps)
 
     if test["particles"] != {}:
         dt = 0
@@ -171,9 +185,9 @@ def test_reader(test):
         nspec: int = test["particles"].get("nspec", 4)
 
         prtl_names = (
-            [f"U{i+1}_{j+1}" for i in range(3) for j in range(nspec)]
+            [f"U{i + 1}_{j + 1}" for i in range(3) for j in range(nspec)]
             + [
-                f"X{i+1}_{j+1}"
+                f"X{i + 1}_{j + 1}"
                 for i in range(
                     2
                     if test["dim"] == "2D" and test.get("coords", "cart") == "cart"
@@ -181,17 +195,23 @@ def test_reader(test):
                 )
                 for j in range(nspec)
             ]
-            + [f"W_{i+1}" for i in range(nspec)]
+            + [f"W_{i + 1}" for i in range(nspec)]
         )
         prtl_names = set(f"p{p}" for p in prtl_names)
 
+        valid_files, valid_steps = reader.GetValidFilesAndSteps(
+            path=PATH, category="particles"
+        )
         # Check that timesteps are read correctly from particles
-        times = reader.ReadPerTimestepVariable(
-            path=PATH, category="particles", varname="Time", newname="t"
-        )["t"]
-        steps = reader.ReadPerTimestepVariable(
-            path=PATH, category="particles", varname="Step", newname="s"
-        )["s"]
+        timestep_variables = reader.ReadPerTimestepVariables(
+            path=PATH,
+            category="particles",
+            varnames=["Time", "Step"],
+            newnames=["t", "s"],
+            valid_files=valid_files,
+        )
+        times = timestep_variables["t"]
+        steps = timestep_variables["s"]
 
         if dt is not None:
             check_equal_arrays(
@@ -207,11 +227,11 @@ def test_reader(test):
         check_equal_arrays(names, prtl_names)
 
         # Check prtl shapes
-        for step in reader.GetValidSteps(path=PATH, category="particles"):
+        for step in valid_steps:
             for sp in range(nspec):
                 reader.ReadArrayShapeAtTimestep(
                     path=PATH,
                     category="particles",
-                    quantity=f"pW_{sp+1}",
+                    quantity=f"pW_{sp + 1}",
                     step=step,
                 )

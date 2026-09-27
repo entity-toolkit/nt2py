@@ -1,8 +1,12 @@
-from typing import Any, Optional, Dict
+from __future__ import annotations
+
+from typing import Any
+
+import xarray as xr
+
 from nt2.plotters.export import (
     makeFramesAndMovie,
 )
-import xarray as xr
 
 
 class accessor:
@@ -21,8 +25,8 @@ class accessor:
     def plot(
         self,
         name: str,
-        movie_kwargs: Dict[str, Any] = {},
-        fig_kwargs: Dict[str, Any] = {},
+        movie_kwargs: dict[str, Any] | None = None,
+        fig_kwargs: dict[str, Any] | None = None,
         aspect_equal: bool = False,
         **kwargs: Any,
     ) -> bool:
@@ -58,12 +62,16 @@ class accessor:
 
         import matplotlib.pyplot as plt
 
+        movie_kwargs = movie_kwargs or {}
+        fig_kwargs = fig_kwargs or {}
+
         def plot_func(ti: int, _: Any) -> None:
             if len(self._obj.isel(t=ti).dims) == 2:
                 if aspect_equal:
                     x1, x2 = self._obj.isel(t=ti).dims
-                    nx1, nx2 = len(self._obj.isel(t=ti)[x1]), len(
-                        self._obj.isel(t=ti)[x2]
+                    nx1, nx2 = (
+                        len(self._obj.isel(t=ti)[x1]),
+                        len(self._obj.isel(t=ti)[x2]),
                     )
                     aspect = nx1 / nx2
                     figsize = fig_kwargs.get("figsize", (6, 4 * aspect))
@@ -75,7 +83,7 @@ class accessor:
                 plt.gca().set_aspect("equal")
             plt.tight_layout()
 
-        num_cpus: Optional[int] = movie_kwargs.pop("num_cpus", None)
+        num_cpus: int | None = movie_kwargs.pop("num_cpus", None)
         return makeFramesAndMovie(
             name=name,
             data=self._obj,

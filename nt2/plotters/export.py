@@ -1,11 +1,14 @@
-from typing import Any, Callable, Union, Optional, List
+from __future__ import annotations
+
+from typing import Any, Callable
+
 import matplotlib.pyplot as plt
 
 
 def makeFramesAndMovie(
     name: str,
     plot: Callable,
-    times: List[float],
+    times: list[float],
     data: Any = None,
     **kwargs: Any,
 ) -> bool:
@@ -36,7 +39,7 @@ def makeFramesAndMovie(
         raise ValueError("Failed to make frames")
 
 
-def makeMovie(**ffmpeg_kwargs: Union[str, int, float]) -> bool:
+def makeMovie(**ffmpeg_kwargs: str | float) -> bool:
     """
     Create a movie from frames using the `ffmpeg` command-line tool.
 
@@ -62,9 +65,7 @@ def makeMovie(**ffmpeg_kwargs: Union[str, int, float]) -> bool:
     """
     import subprocess
 
-    input_pattern: str = (
-        f"{ffmpeg_kwargs.get('input', 'step_')}%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}"
-    )
+    input_pattern: str = f"{ffmpeg_kwargs.get('input', 'step_')}%0{ffmpeg_kwargs.get('number', 3)}d.{ffmpeg_kwargs.get('extension', 'png')}"
 
     command = [
         ffmpeg_kwargs.get("ffmpeg", "ffmpeg"),
@@ -86,7 +87,12 @@ def makeMovie(**ffmpeg_kwargs: Union[str, int, float]) -> bool:
     ]
     command = [str(c) for c in command if c is not None]
     print("Command:\n", " ".join(command))
-    result = subprocess.run(command, capture_output=True, text=True)
+    result = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
     if result.returncode == 0:
         print("ffmpeg -- [OK]")
@@ -112,11 +118,11 @@ def _plot_and_save(ti: int, t: float, fpath: str, plot: Callable, data: Any) -> 
 
 def makeFrames(
     plot: Callable,
-    times: List[float],
+    times: list[float],
     fpath: str,
     data: Any = None,
-    num_cpus: Optional[int] = None,
-) -> List[bool]:
+    num_cpus: int | None = None,
+) -> list[bool]:
     """
     Create plot frames from a set of timesteps of the same dataset.
 
@@ -160,9 +166,10 @@ def makeFrames(
     >>> makeFrames(plot_func, range(100), 'output/', num_cpus=16)
 
     """
+    import os
+
     from loky import get_reusable_executor
     from tqdm import tqdm
-    import os
 
     os.makedirs(fpath, exist_ok=True)
 

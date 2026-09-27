@@ -1,9 +1,13 @@
-from typing import Any, Callable, Optional, Union, List, Dict, Tuple
-import matplotlib.pyplot as plt
+from __future__ import annotations
+
+from typing import Any, Callable
+
 import matplotlib.figure as mfigure
+import matplotlib.pyplot as plt
 import xarray as xr
-from nt2.utils import DataIs2DPolar
+
 from nt2.plotters.export import makeFramesAndMovie
+from nt2.utils import DataIs2DPolar
 
 
 class ds_accessor:
@@ -12,7 +16,7 @@ class ds_accessor:
 
     def __axes_grid(
         self,
-        grouped_fields: Dict[str, List[str]],
+        grouped_fields: dict[str, list[str]],
         makeplot: Callable,
         nrows: int,
         ncols: int,
@@ -20,7 +24,7 @@ class ds_accessor:
         size: float,
         aspect: float,
         **fig_kwargs: Any,
-    ) -> Tuple[mfigure.Figure, List[plt.Axes]]:
+    ) -> tuple[mfigure.Figure, list[plt.Axes]]:
         vpad = fig_kwargs.pop("vpad", 0.5)
         hpad = fig_kwargs.pop("hpad", 0.5)
         if aspect > 1:
@@ -51,7 +55,7 @@ class ds_accessor:
 
     @staticmethod
     def _fixed_axes_grid_with_cbars(
-        fields: List[str],
+        fields: list[str],
         makeplot: Callable,
         makecbar: Callable,
         nrows: int,
@@ -61,7 +65,7 @@ class ds_accessor:
         aspect: float,
         cbar_w: float,
         **fig_kwargs: Any,
-    ) -> Tuple[mfigure.Figure, List[plt.Axes]]:
+    ) -> tuple[mfigure.Figure, list[plt.Axes]]:
         from mpl_toolkits.axes_grid1 import Divider, Size
 
         vpad = fig_kwargs.pop("vpad", 0.5)
@@ -89,7 +93,7 @@ class ds_accessor:
         v += [Size.Fixed(vpad)]
 
         divider = Divider(fig, (0, 0, 1, 1), h, v, aspect=False)
-        axes: List[plt.Axes] = []
+        axes: list[plt.Axes] = []
 
         cntr = 0
         for i in range(nrows):
@@ -117,15 +121,15 @@ class ds_accessor:
 
     def plot(
         self,
-        fig: Optional[mfigure.Figure] = None,
-        name: Optional[str] = None,
-        skip_fields: Optional[List[str]] = None,
-        only_fields: Optional[List[str]] = None,
-        fig_kwargs: Optional[Dict[str, Any]] = None,
-        plot_kwargs: Optional[Dict[str, Any]] = None,
-        movie_kwargs: Optional[Dict[str, Any]] = None,
-        set_aspect: Optional[str] = "equal",
-    ) -> Union[mfigure.Figure, bool]:
+        fig: mfigure.Figure | None = None,
+        name: str | None = None,
+        skip_fields: list[str] | None = None,
+        only_fields: list[str] | None = None,
+        fig_kwargs: dict[str, Any] | None = None,
+        plot_kwargs: dict[str, Any] | None = None,
+        movie_kwargs: dict[str, Any] | None = None,
+        set_aspect: str | None = "equal",
+    ) -> mfigure.Figure | bool:
         """
         Plots the overview plot for fields at a given time or step (or as a movie).
 
@@ -239,20 +243,20 @@ class ds_accessor:
 
     @staticmethod
     def _get_fields_to_plot(
-        data: xr.Dataset, skip_fields: List[str], only_fields: List[str]
-    ) -> List[str]:
+        data: xr.Dataset, skip_fields: list[str], only_fields: list[str]
+    ) -> list[str]:
         import re
 
         nfields = len(data.data_vars)
         if nfields > 0:
-            keys: List[str] = [str(k) for k in data.keys()]
+            keys: list[str] = [str(k) for k in data]
             if len(only_fields) == 0:
                 fields_to_plot = [
-                    f for f in keys if not any([re.match(sf, f) for sf in skip_fields])
+                    f for f in keys if not any(re.match(sf, f) for sf in skip_fields)
                 ]
             else:
                 fields_to_plot = [
-                    f for f in keys if any([re.match(sf, f) for sf in only_fields])
+                    f for f in keys if any(re.match(sf, f) for sf in only_fields)
                 ]
         else:
             fields_to_plot = []
@@ -265,9 +269,9 @@ class ds_accessor:
 
     @staticmethod
     def _get_fields_minmax(
-        data: xr.Dataset, fields: List[str]
-    ) -> Dict[str, Optional[Tuple[float, float]]]:
-        minmax: Dict[str, Optional[Tuple[float, float]]] = {
+        data: xr.Dataset, fields: list[str]
+    ) -> dict[str, tuple[float, float] | None]:
+        minmax: dict[str, tuple[float, float] | None] = {
             "E": None,
             "B": None,
             "J": None,
@@ -304,22 +308,23 @@ class ds_accessor:
     def plot_frame_1d(
         self,
         data: xr.Dataset,
-        fig: Optional[mfigure.Figure],
-        skip_fields: List[str],
-        only_fields: List[str],
-        fig_kwargs: Dict[str, Any],
-        plot_kwargs: Dict[str, Any],
+        fig: mfigure.Figure | None,
+        skip_fields: list[str],
+        only_fields: list[str],
+        fig_kwargs: dict[str, Any],
+        plot_kwargs: dict[str, Any],
     ) -> mfigure.Figure:
         if len(data.dims) != 1:
             raise ValueError("Pass 1D data; use .sel or .isel to reduce dimension.")
 
-        import math, re
+        import math
+        import re
 
         # count the number of subplots
         fields_to_plot = self._get_fields_to_plot(data, skip_fields, only_fields)
 
         # group fields by their first letter
-        grouped_fields: Dict[str, List[str]] = {}
+        grouped_fields: dict[str, list[str]] = {}
         for f in fields_to_plot:
             key = f[0]
             if key not in grouped_fields:
@@ -329,8 +334,8 @@ class ds_accessor:
         nplots = len(grouped_fields)
 
         aspect = 0.5
-        ncols = max(1, int(math.floor(nplots * 1.5 * aspect / (1 + 1.5 * aspect))))
-        nrows = max(1, int(math.ceil(nplots / ncols)))
+        ncols = max(1, math.floor(nplots * 1.5 * aspect / (1 + 1.5 * aspect)))
+        nrows = max(1, math.ceil(nplots / ncols))
 
         figsize0 = 3.0
 
@@ -338,9 +343,9 @@ class ds_accessor:
         kwargs = {}
         for fld in fields_to_plot:
             kwargs[fld] = {}
-            for fld_kwargs in plot_kwargs:
+            for fld_kwargs, val in plot_kwargs.items():
                 if re.match(fld_kwargs, fld):
-                    kwargs[fld] = {**plot_kwargs[fld_kwargs]}
+                    kwargs[fld] = {**val}
                     break
 
         def make_plot(ax: plt.Axes, fld: str):
@@ -373,21 +378,23 @@ class ds_accessor:
     def plot_frame_2d(
         self,
         data: xr.Dataset,
-        fig: Optional[mfigure.Figure],
-        skip_fields: List[str],
-        only_fields: List[str],
-        fig_kwargs: Dict[str, Any],
-        plot_kwargs: Dict[str, Any],
-        set_aspect: Optional[str],
+        fig: mfigure.Figure | None,
+        skip_fields: list[str],
+        only_fields: list[str],
+        fig_kwargs: dict[str, Any],
+        plot_kwargs: dict[str, Any],
+        set_aspect: str | None,
     ) -> mfigure.Figure:
         if len(data.dims) != 2:
             raise ValueError("Pass 2D data; use .sel or .isel to reduce dimension.")
 
         x1, x2 = data.dims
 
+        import math
+        import re
+
         import matplotlib.colors as mcolors
         import numpy as np
-        import math, re
 
         # count the number of subplots
         fields_to_plot = self._get_fields_to_plot(data, skip_fields, only_fields)
@@ -402,8 +409,8 @@ class ds_accessor:
         else:
             aspect = 1.5
 
-        ncols = max(1, int(math.floor(nfields * 1.5 * aspect / (1 + 1.5 * aspect))))
-        nrows = max(1, int(math.ceil(nfields / ncols)))
+        ncols = max(1, math.floor(nfields * 1.5 * aspect / (1 + 1.5 * aspect)))
+        nrows = max(1, math.ceil(nfields / ncols))
 
         figsize0 = 3.0
 
@@ -443,9 +450,9 @@ class ds_accessor:
                 "vmax": vmax,
             }
             kwargs[fld] = default_kwargs
-            for fld_kwargs in plot_kwargs:
+            for fld_kwargs, val in plot_kwargs.items():
                 if re.match(fld_kwargs, fld):
-                    kwargs[fld] = {**default_kwargs, **plot_kwargs[fld_kwargs]}
+                    kwargs[fld] = {**default_kwargs, **val}
                     break
             if "norm" in kwargs[fld]:
                 vmin = kwargs[fld].pop("vmin")
